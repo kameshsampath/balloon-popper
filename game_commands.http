@@ -1,0 +1,7 @@
+###
+# Start Game
+POST localhost:8080/game/start
+
+###
+# Stop the game
+POST localhost:8080/game/stop

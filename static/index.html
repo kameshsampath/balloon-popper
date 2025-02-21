@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Balloon Popping Game</title>
+    <style>
+        :root {
+            --primary-color: #4a90e2;
+            --secondary-color: #f39c12;
+            --background-color: #f5f6fa;
+            --text-color: #2c3e50;
+            --success-color: #2ecc71;
+            --error-color: #e74c3c;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 1rem;
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .registration-form {
+            max-width: 500px;
+            margin: 0 auto;
+            padding: 2rem;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+        }
+
+        .registration-form.hidden {
+            display: none;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: bold;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+
+        .game-container {
+            display: none;
+        }
+
+        .game-container.active {
+            display: flex;
+            gap: 20px;
+        }
+
+        .game-area {
+            flex: 3;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        #gameCanvas {
+            width: 100%;
+            height: 500px;
+            background: #fff;
+            display: block;
+        }
+
+        .score-panel {
+            flex: 1;
+            padding: 1.5rem;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .player-info {
+            text-align: center;
+            margin-bottom: 1rem;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        }
+
+        .player-info h3 {
+            margin-bottom: 0.5rem;
+        }
+
+        .score {
+            font-size: 24px;
+            font-weight: bold;
+            text-align: center;
+            margin: 1rem 0;
+            color: var(--primary-color);
+        }
+
+        .bonus {
+            color: var(--secondary-color);
+            animation: pulse 0.5s ease-in-out;
+        }
+
+        #bonusHits, #regularHits {
+            text-align: center;
+            padding: 8px;
+            margin: 5px 0;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        }
+
+        .favorite-colors {
+            margin-top: 1rem;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        }
+
+        .favorite-colors h3 {
+            margin-bottom: 0.5rem;
+        }
+
+        .favorite-colors span {
+            display: inline-block;
+            padding: 4px 8px;
+            margin: 2px;
+            border-radius: 4px;
+            font-size: 14px;
+            color: white;
+            text-shadow: 1px 1px 1px rgba(0,0,0,0.3);
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #357abd;
+        }
+
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        .status {
+            text-align: center;
+            padding: 10px;
+            margin-top: 15px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+
+        .status.active {
+            background-color: rgba(46, 204, 113, 0.2);
+            color: var(--success-color);
+        }
+
+        .status.inactive {
+            background-color: rgba(231, 76, 60, 0.2);
+            color: var(--error-color);
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+    </style>
+</head>
+<!-- Rest of the HTML remains the same as in the previous version -->
+<body>
+    <header>
+        <h1>Balloon Popping Game</h1>
+    </header>
+
+    <div class="container">
+        <div id="registrationForm" class="registration-form">
+            <h2>Player Registration</h2>
+            <div class="form-group">
+                <label for="playerName">Your Name:</label>
+                <input type="text" id="playerName" required placeholder="Enter your name">
+            </div>
+            <div class="form-group">
+                <label for="characterSelect">Select Character:</label>
+                <select id="characterSelect" required>
+                    <option value="">Choose a character...</option>
+                </select>
+            </div>
+            <div id="favoriteColors" class="favorite-colors">
+                <h3>Favorite Colors:</h3>
+                <div id="colorList"></div>
+            </div>
+            <button id="startPlaying">Start Playing</button>
+        </div>
+
+        <div id="gameContainer" class="game-container">
+            <div class="game-area">
+                <canvas id="gameCanvas"></canvas>
+            </div>
+            
+            <div class="score-panel">
+                <div class="player-info">
+                    <h3 id="playerInfo">Player: </h3>
+                    <div id="characterInfo">Character: </div>
+                    <div id="favoriteColorsInfo" class="favorite-colors">
+                        <h3>Bonus Colors:</h3>
+                        <div id="bonusInfo"></div>
+                    </div>
+                </div>
+                <div class="score" id="score">Score: 0</div>
+                <div id="bonusHits">Bonus Hits: 0</div>
+                <div id="regularHits">Regular Hits: 0</div>
+                <div class="status" id="gameStatus">Waiting for game to start...</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/game.js"></script>
+    <script>
+        // Previous JavaScript code remains the same
+        let gameInstance = null;
+        
+        document.addEventListener('DOMContentLoaded', async () => {
+            console.log("Page loaded, initializing game setup");
+            
+            // Fetch game configuration
+            const response = await fetch('/config');
+            const config = await response.json();
+            
+            // Populate character select
+            const characterSelect = document.getElementById('characterSelect');
+            Object.keys(config.character_favorites).forEach(character => {
+                const option = document.createElement('option');
+                option.value = character;
+                option.textContent = character.replace('_', ' ');
+                characterSelect.appendChild(option);
+            });
+
+            // Handle character selection
+            characterSelect.addEventListener('change', (e) => {
+                const character = e.target.value;
+                const colors = config.character_favorites[character] || [];
+                const colorList = document.getElementById('colorList');
+                colorList.innerHTML = colors.map(color => 
+                    `<span style="background-color: ${color}">${color}</span>`
+                ).join('');
+            });
+
+            // Handle player registration
+            document.getElementById('startPlaying').addEventListener('click', async () => {
+                const playerName = document.getElementById('playerName').value.trim();
+                const character = characterSelect.value;
+
+                if (!playerName || !character) {
+                    alert('Please fill in all fields!');
+                    return;
+                }
+
+                console.log("Starting game for player:", playerName, "as character:", character);
+
+                // Hide registration form and show game
+                document.getElementById('registrationForm').classList.add('hidden');
+                const gameContainer = document.getElementById('gameContainer');
+                gameContainer.classList.add('active');
+
+                // Update player info
+                document.getElementById('playerInfo').textContent = `Player: ${playerName}`;
+                document.getElementById('characterInfo').textContent = `Character: ${character}`;
+                document.getElementById('bonusInfo').innerHTML =  config.character_favorites[character].map(color => 
+                    `<span style="background-color: ${color}">${color}</span>`
+                ).join('');
+
+                // Check if game is active
+                try {
+                    const status = await fetch('/game/status').then(r => r.json());
+                    console.log("Game status:", status);
+                    
+                    if (status.is_active) {
+                        console.log("Game is active, creating game instance");
+                        gameInstance = new BalloonGame(character, playerName);
+                    } else {
+                        console.log("Waiting for game to start...");
+                        document.getElementById('gameStatus').textContent = 'Waiting for game to start...';
+                    }
+                } catch (error) {
+                    console.error('Error checking game status:', error);
+                }
+            });
+
+            // Check game status periodically
+            setInterval(async () => {
+                try {
+                    const status = await fetch('/game/status').then(r => r.json());
+                    const statusDiv = document.getElementById('gameStatus');
+                    
+                    if (status.is_active) {
+                        statusDiv.textContent = 'Game is Active';
+                        statusDiv.className = 'status active';
+                        if (!gameInstance && document.getElementById('gameContainer').classList.contains('active')) {
+                            console.log("Game became active, creating game instance");
+                            const playerName = document.getElementById('playerName').value;
+                            const character = characterSelect.value;
+                            gameInstance = new BalloonGame(character, playerName);
+                        }
+                    } else {
+                        statusDiv.textContent = 'Waiting for game to start...';
+                        statusDiv.className = 'status inactive';
+                        if (gameInstance) {
+                            console.log("Game stopped, cleaning up instance");
+                            gameInstance.stopGame();
+                            gameInstance = null;
+                        }
+                    }
+                } catch (error) {
+                    console.error('Failed to check game status:', error);
+                }
+            }, 1000);
+        });
+    </script>
+</body>
+</html>
