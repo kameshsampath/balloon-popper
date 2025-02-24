@@ -1,0 +1,45 @@
+[run]
+timeout = "5m"
+tests = true
+build-tags = []
+modules-download-mode = "readonly"
+
+[linters]
+disable-all = true
+enable = [
+  "gofmt",
+  "govet",
+  "staticcheck",
+  "gosimple",
+  "ineffassign",
+  "goconst",
+  "errcheck",
+  "gosec",
+  "misspell",
+  "unparam",
+  "unused",
+  "revive",
+]
+
+[linters-settings.goconst]
+min-len = 2
+min-occurrences = 3
+
+[linters-settings.gosec]
+excludes = []
+
+[linters-settings.revive]
+ignore-generated-header = false
+severity = "warning"
+confidence = 0.8
+
+[issues]
+exclude-use-default = false
+max-per-linter = 0
+max-same-issues = 0
+fix = true
+
+[output]
+formats = "colored-line-number"
+print-issued-lines = true
+print-linter-name = true

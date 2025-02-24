@@ -37,6 +37,44 @@ type GameState struct {
 	StartedAt      time.Time `json:"started_at"`
 	EndedAt        time.Time `json:"ended_at"`
 	CurrentPlayers []string  `json:"current_players"`
+	PlayerCount    int       `json:"player_count,omitempty"`
+}
+
+// GameMessage represents the message send with each balloon pops
+type GameMessage struct {
+	Player       string `json:"player"`
+	Character    string `json:"character"`
+	BalloonColor string `json:"balloon_color"`
+}
+
+// ScoreUpdate represents the score state
+type ScoreUpdate struct {
+	Type  string     `json:"type"`
+	Event *GameEvent `json:"event"`
+}
+
+// GameStatus represents the game status started, stopped and active
+type GameStatus struct {
+	Message      string       `json:"message,omitempty"`
+	SessionStats SessionStats `json:"session_stats,omitempty"`
+}
+
+// SessionStats provides the session stats
+type SessionStats struct {
+	StartedAt       time.Time `json:"started_at,omitempty"`
+	EndedAt         time.Time `json:"ended_at,omitempty"`
+	DurationSeconds float64   `json:"duration_seconds,omitempty"`
+	TotalPlayers    int       `json:"total_players,omitempty"`
+	PlayerList      []string  `json:"player_list,omitempty"`
+}
+
+// UserCredentials defines the structure for storing credentials
+type UserCredentials struct {
+	Username string `json:"username"`
+	Name     string `json:"name"`
+	Password string `json:"password_hash"` // Stores bcrypt hash
+	Email    string `json:"email"`
+	Role     string `json:"role"`
 }
 
 // NewGameConfig creates a new GameConfig with default values

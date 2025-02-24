@@ -6,13 +6,17 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"github.com/kameshsampath/balloon-popper-server/pkg/logger"
 	"github.com/youmark/pkcs8"
 	"os"
 	"path"
 	"path/filepath"
 )
 
-var _ RSAKeyGenerator = (*Config)(nil)
+var (
+	_   RSAKeyGenerator = (*Config)(nil)
+	log                 = logger.Get()
+)
 
 // NewRSAKeyGenerator creates the new instance of generator
 func NewRSAKeyGenerator(bits int) *Config {
@@ -21,23 +25,21 @@ func NewRSAKeyGenerator(bits int) *Config {
 	}
 
 	return &Config{
-		keyInfo: &KeyInfo{
+		KeyInfo: &KeyInfo{
 			bits: bits,
 		},
 	}
 }
 
 func (r *Config) GenerateKeyPair() error {
-	key, err := rsa.GenerateKey(rand.Reader, r.keyInfo.bits)
+	key, err := rsa.GenerateKey(rand.Reader, r.KeyInfo.bits)
 	if err != nil {
 		return fmt.Errorf("failed to generate RSA key pair: %v", err)
 	}
 
 	//if no error set the key
-	r.keyInfo = &KeyInfo{
-		publicKey:  &key.PublicKey,
-		privateKey: key,
-	}
+	r.KeyInfo.publicKey = &key.PublicKey
+	r.KeyInfo.privateKey = key
 
 	// Save private key
 	if err := r.savePrivateKeyPKCS8(); err != nil {
@@ -51,16 +53,14 @@ func (r *Config) GenerateKeyPair() error {
 		os.Exit(1)
 	}
 
-	// Save password file
-	passFilePath := filepath.Join(path.Dir(r.PrivateKeyFile), ".pass")
-	passFile, err := os.OpenFile(passFilePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
-	if err != nil {
-		panic(fmt.Errorf("failed to open pass key file: %v", err))
-	}
-	defer passFile.Close()
-	_, err = passFile.Write(r.keyInfo.passphrase)
-	if err != nil {
-		return err
+	log.Infof("using passphrase for RSA key pair,%s", r.KeyInfo.passphrase)
+
+	if r.KeyInfo.passphrase != nil {
+		err = r.savePassFile()
+		if err != nil {
+			fmt.Printf("Error saving private key pass file: %v\n", err)
+			return err
+		}
 	}
 
 	return nil
@@ -82,7 +82,7 @@ func (r *Config) VerifyKeyPair() error {
 
 	// Parse private key
 	var privateKey interface{}
-	privateKey, err = pkcs8.ParsePKCS8PrivateKey(block.Bytes, r.keyInfo.passphrase)
+	privateKey, err = pkcs8.ParsePKCS8PrivateKey(block.Bytes, r.KeyInfo.passphrase)
 
 	if err != nil {
 		return fmt.Errorf("failed to parse private key: %v", err)
@@ -101,7 +101,7 @@ func (r *Config) savePrivateKeyPKCS8() error {
 	var privateKeyBytes []byte
 	var err error
 
-	privateKeyBytes, err = pkcs8.MarshalPrivateKey(r.keyInfo.privateKey, r.keyInfo.passphrase, nil)
+	privateKeyBytes, err = pkcs8.MarshalPrivateKey(r.KeyInfo.privateKey, r.KeyInfo.passphrase, nil)
 
 	if err != nil {
 		return fmt.Errorf("failed to marshal private key to PKCS#8: %v", err)
@@ -110,7 +110,7 @@ func (r *Config) savePrivateKeyPKCS8() error {
 	// Create PEM block
 	privatePEM := &pem.Block{
 		Type: func() string {
-			if r.keyInfo.passphrase != nil {
+			if r.KeyInfo.passphrase != nil {
 				return "ENCRYPTED PRIVATE KEY"
 			}
 			return "PRIVATE KEY" // standard type for PKCS#8
@@ -128,7 +128,7 @@ func (r *Config) savePrivateKeyPKCS8() error {
 	if err != nil {
 		return fmt.Errorf("failed to open private key file: %v", err)
 	}
-	defer privateFile.Close()
+	defer privateFile.Close() //nolint:errcheck
 
 	if err := pem.Encode(privateFile, privatePEM); err != nil {
 		return fmt.Errorf("failed to write private key: %v", err)
@@ -140,7 +140,7 @@ func (r *Config) savePrivateKeyPKCS8() error {
 // savePublicKey saves the Public Key to file
 func (r *Config) savePublicKey() error {
 	// Marshal public key
-	publicKeyBytes, err := x509.MarshalPKIXPublicKey(r.keyInfo.publicKey)
+	publicKeyBytes, err := x509.MarshalPKIXPublicKey(r.KeyInfo.publicKey)
 	if err != nil {
 		return fmt.Errorf("failed to marshal public key: %v", err)
 	}
@@ -157,15 +157,32 @@ func (r *Config) savePublicKey() error {
 	}
 
 	// Save public key
-	publicFile, err := os.OpenFile(r.PublicKeyFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	publicFile, err := os.OpenFile(r.PublicKeyFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
 		return fmt.Errorf("failed to open public key file: %v", err)
 	}
-	defer publicFile.Close()
+	defer publicFile.Close() //nolint:errcheck
 
 	if err := pem.Encode(publicFile, publicPEM); err != nil {
 		return fmt.Errorf("failed to write public key: %v", err)
 	}
 
+	return nil
+}
+
+// savePassFile saves the private key passphrase into a file
+// TODO: encrypt and save
+func (r *Config) savePassFile() error {
+	// Save password file
+	passFilePath := filepath.Join(path.Dir(r.PrivateKeyFile), ".pass")
+	passFile, err := os.OpenFile(filepath.Clean(passFilePath), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	if err != nil {
+		panic(fmt.Errorf("failed to open pass key file: %v", err))
+	}
+	defer passFile.Close() //nolint:errcheck
+	_, err = passFile.Write(r.KeyInfo.passphrase)
+	if err != nil {
+		return err
+	}
 	return nil
 }

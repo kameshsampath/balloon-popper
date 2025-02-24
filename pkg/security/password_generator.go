@@ -41,10 +41,10 @@ func NewPasswordGenerator() *PasswordConfig {
 }
 
 // GeneratePassword creates a cryptographically secure random password
-func (pc *PasswordConfig) GeneratePassword() ([]byte, error) {
+func (pc *PasswordConfig) GeneratePassword() (string, error) {
 	// Validate configuration
 	if pc.Length < 8 {
-		return nil, fmt.Errorf("password length must be at least 8")
+		return "", fmt.Errorf("password length must be at least 8")
 	}
 
 	// Build character set
@@ -57,7 +57,7 @@ func (pc *PasswordConfig) GeneratePassword() ([]byte, error) {
 			// Add one random lowercase character
 			randomChar, err := getRandomChar(lowerChars)
 			if err != nil {
-				return nil, err
+				return "", err
 			}
 			requiredChars.WriteString(string(randomChar))
 		}
@@ -68,7 +68,7 @@ func (pc *PasswordConfig) GeneratePassword() ([]byte, error) {
 		if pc.RequireAll {
 			randomChar, err := getRandomChar(upperChars)
 			if err != nil {
-				return nil, err
+				return "", err
 			}
 			requiredChars.WriteString(string(randomChar))
 		}
@@ -79,7 +79,7 @@ func (pc *PasswordConfig) GeneratePassword() ([]byte, error) {
 		if pc.RequireAll {
 			randomChar, err := getRandomChar(numbers)
 			if err != nil {
-				return nil, err
+				return "", err
 			}
 			requiredChars.WriteString(string(randomChar))
 		}
@@ -90,7 +90,7 @@ func (pc *PasswordConfig) GeneratePassword() ([]byte, error) {
 		if pc.RequireAll {
 			randomChar, err := getRandomChar(symbols)
 			if err != nil {
-				return nil, err
+				return "", err
 			}
 			requiredChars.WriteString(string(randomChar))
 		}
@@ -115,13 +115,13 @@ func (pc *PasswordConfig) GeneratePassword() ([]byte, error) {
 	}
 
 	if chars.Len() == 0 {
-		return nil, fmt.Errorf("no characters available with current configuration")
+		return "", fmt.Errorf("no characters available with current configuration")
 	}
 
 	// Calculate remaining length after required characters
 	remainingLength := pc.Length - requiredChars.Len()
 	if remainingLength < 0 {
-		return nil, fmt.Errorf("password length too short for required characters")
+		return "", fmt.Errorf("password length too short for required characters")
 	}
 
 	// Generate random characters for remaining length
@@ -130,15 +130,15 @@ func (pc *PasswordConfig) GeneratePassword() ([]byte, error) {
 	for i := 0; i < remainingLength; i++ {
 		randomChar, err := getRandomChar(charset)
 		if err != nil {
-			return nil, fmt.Errorf("failed to generate random character: %v", err)
+			return "", fmt.Errorf("failed to generate random character: %v", err)
 		}
 		result += string(randomChar)
 	}
 
 	// Shuffle the final password
-	shuffled, err := shuffleToBytes(result)
+	shuffled, err := shuffleString(result)
 	if err != nil {
-		return nil, fmt.Errorf("failed to shuffle password: %v", err)
+		return "", fmt.Errorf("failed to shuffle password: %v", err)
 	}
 
 	return shuffled, nil
@@ -157,16 +157,16 @@ func getRandomChar(chars string) (byte, error) {
 	return chars[n.Int64()], nil
 }
 
-// shuffleToBytes randomly shuffles a string
-func shuffleToBytes(s string) ([]byte, error) {
-	b := []byte(s)
-	for i := len(b) - 1; i > 0; i-- {
+// shuffleString randomly shuffles a string
+func shuffleString(s string) (string, error) {
+	runes := []rune(s)
+	for i := len(runes) - 1; i > 0; i-- {
 		n, err := rand.Int(rand.Reader, big.NewInt(int64(i+1)))
 		if err != nil {
-			return nil, err
+			return "", err
 		}
 		j := n.Int64()
-		b[i], b[j] = b[j], b[i]
+		runes[i], runes[j] = runes[j], runes[i]
 	}
-	return b, nil
+	return string(runes), nil
 }

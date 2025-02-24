@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/kameshsampath/balloon-popper-server/pkg/models"
 	"time"
 
-	"github.com/kameshsampath/balloon-popper-server/models"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 

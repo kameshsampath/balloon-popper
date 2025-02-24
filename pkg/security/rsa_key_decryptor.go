@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/youmark/pkcs8"
 	"os"
+	"path/filepath"
 )
 
 var _ PrivateKeyDecryptor = (*PrivateKeyDecryptorConfig)(nil)
@@ -32,7 +33,7 @@ func (d *PrivateKeyDecryptorConfig) Decrypt() error {
 		return ErrNotPEMFormat
 	}
 
-	if block.Type != "ENCRYPTED PRIVATE KEY" {
+	if block.Type != BlockTypeEncrypted {
 		return ErrInvalidKeyFormat
 	}
 
@@ -53,9 +54,8 @@ func (d *PrivateKeyDecryptorConfig) Decrypt() error {
 // loadKey loads the Private Key file, loads it if its unencrypted else gets raw bytes for decrypting
 func loadKey(privateKeyFile string) (*PrivateKeyDecryptorConfig, error) {
 	var pemData []byte
-
-	pemData, err := os.ReadFile(privateKeyFile)
-	if err != nil {
+	var err error
+	if pemData, err = os.ReadFile(filepath.Clean(privateKeyFile)); err != nil {
 		return nil, fmt.Errorf("failed to read private key: %w", err)
 	}
 
@@ -84,14 +84,15 @@ func loadKey(privateKeyFile string) (*PrivateKeyDecryptorConfig, error) {
 				privateKey: rsaKey,
 				publicKey:  &rsaKey.PublicKey,
 			},
-			rawPEM:   block.Bytes,
+			rawPEM:   pemData,
 			isLocked: false,
 		}, nil
 
-	case "ENCRYPTED PRIVATE KEY": // Encrypted PKCS#8
+	case BlockTypeEncrypted: // Encrypted PKCS#8
 		return &PrivateKeyDecryptorConfig{
-			rawPEM:   block.Bytes,
-			isLocked: false,
+			rawPEM:   pemData,
+			isLocked: true,
+			KeyInfo:  &KeyInfo{},
 		}, nil
 
 	default:
