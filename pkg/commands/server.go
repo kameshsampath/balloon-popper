@@ -20,32 +20,49 @@ package commands
 import (
 	"fmt"
 	"github.com/kameshsampath/balloon-popper-server/pkg/logger"
+	"github.com/kameshsampath/balloon-popper-server/pkg/producer"
+	"github.com/kameshsampath/balloon-popper-server/pkg/routes"
+	"github.com/kameshsampath/balloon-popper-server/pkg/security"
 	"github.com/kameshsampath/balloon-popper-server/pkg/web"
 	"github.com/spf13/cobra"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
 )
 
+var appLogger = logger.Get()
+
 type ServerOptions struct {
-	privateKeyFile     string
-	privateKeyPassword string
-	port               int
+	privateKeyFile        string
+	privateKeyPassword    string
+	kafkaBootstrapServers string
+	kafkaTopic            string
+	port                  int
+	userCredentialsFile   string
+	verbose               bool
 }
 
 func (s *ServerOptions) AddFlags(cmd *cobra.Command) {
 	flags := cmd.Flags()
 
-	flags.StringVarP(&s.privateKeyFile, "private-key-file", "f", "",
-		"RSA private key file for JWT token signing")
-	flags.StringVarP(&s.privateKeyPassword, "private-key-password", "w", "",
-		"RSA private key password")
-	flags.IntVarP(&s.port, "port", "p", 8080,
-		"Server listening port")
+	// Add flags
+	flags.StringVarP(&s.privateKeyFile, "key-file", "k", "", "Path to the private key file")
+	flags.StringVarP(&s.privateKeyPassword, "key-password", "p", "", "Password for the private key")
+	flags.StringVarP(&s.kafkaBootstrapServers, "kafka-servers", "s", "localhost:19094", "Kafka bootstrap servers")
+	flags.StringVarP(&s.kafkaTopic, "kafka-topic", "t", "balloon-game", "Kafka topic to send balloon game scores")
+	flags.IntVarP(&s.port, "port", "P", 8080, "Server port")
+	flags.StringVarP(&s.userCredentialsFile, "credentials-file", "c", "", "Path to user credentials file")
+	flags.BoolVarP(&s.verbose, "verbose", "v", false, "Enable verbose mode")
 
 	// Mark required flags
-	cobra.CheckErr(cmd.MarkFlagRequired("private-key-file"))
+	err := cmd.MarkFlagRequired("key-file")
+	if err != nil {
+		appLogger.Fatal(err)
+	}
+	err = cmd.MarkFlagRequired("credentials-file")
+	if err != nil {
+		appLogger.Fatal(err)
+	}
 }
 
 func (s *ServerOptions) Validate(cmd *cobra.Command, args []string) error {
@@ -53,22 +70,61 @@ func (s *ServerOptions) Validate(cmd *cobra.Command, args []string) error {
 }
 
 func (s *ServerOptions) Execute(cmd *cobra.Command, args []string) error {
-
-	server := web.NewServer(logger.Get())
-
+	var err error
+	logLevel := "info"
+	lc := logger.Config{
+		Level:  logLevel,
+		Output: os.Stdout,
+	}
+	if s.verbose {
+		lc.Level = "debug"
+		lc.WithCaller = true
+		lc.Development = true
+	}
+	if appLogger, err = logger.NewLogger(lc); err != nil {
+		appLogger.Warnf("Unable to initialize logger: %v.Using defaults.", err)
+	}
+	//check to see if the private key file exists
+	if _, err := os.Stat(s.privateKeyFile); err != nil {
+		return fmt.Errorf("Error: error loading %s  private key file: %v", s.privateKeyFile, err)
+	}
+	// create endpoint with JWT config
+	ec, err := routes.NewEndpoints(s.privateKeyFile, s.privateKeyPassword)
+	if err != nil {
+		return err
+	}
+	ec.Logger = appLogger
+	//Load Users
+	if c, err := security.LoadCredentials(s.userCredentialsFile); err != nil {
+		return err
+	} else {
+		ec.Users = c
+	}
+	// Initialize Kafka kafkaScoreProducer
+	kp, err := producer.NewKafkaScoreProducer(s.kafkaBootstrapServers, s.kafkaTopic)
+	if err != nil {
+		return err
+	}
+	ec.KafkaProducer = kp
+	// Start Kafka producer
+	if err := ec.KafkaProducer.Start(); err != nil {
+		return fmt.Errorf("failed to start Kafka producer: %v", err)
+	}
+	//Create a new Server
+	server := web.NewServer(appLogger, s.port, ec)
 	// Graceful shutdown
 	go func() {
 		sigChan := make(chan os.Signal, 1)
 		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 		<-sigChan
 		if err := server.Stop(); err != nil {
-			log.Printf("Error stopping server: %v", err)
+			appLogger.Errorf("Error stopping server: %v", err)
 		}
 		os.Exit(0)
 	}()
-
+	//Start the server
 	if err := server.Start(); err != nil {
-		log.Fatalf("Failed to start server: %v", err)
+		appLogger.Fatalf("Failed to start server: %v", err)
 	}
 
 	return nil

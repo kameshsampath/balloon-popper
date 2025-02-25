@@ -4,33 +4,30 @@ import (
 	"fmt"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/joho/godotenv"
-	"github.com/kameshsampath/balloon-popper-server/pkg/producer"
 	"github.com/kameshsampath/balloon-popper-server/pkg/routes"
-	"github.com/kameshsampath/balloon-popper-server/pkg/security"
 	echojwt "github.com/labstack/echo-jwt/v4"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"go.uber.org/zap"
-	"os"
 	"path/filepath"
 	"strconv"
 	"time"
 )
 
-// Server allows configuring the echo server
+// Server represents the HTTP server configuration and dependencies
 type Server struct {
-	endPointsConfig       *routes.EndpointConfig
-	echo                  *echo.Echo
-	Logger                *zap.SugaredLogger
-	Port                  int
-	JTWPrivateKeyFile     string
-	PrivateKeyPassphrase  string
-	KafkaBootstrapServers string
-	KafkaTopic            string
-	UserCredentialsFile   string
+	endPointsConfig *routes.EndpointConfig
+	echo            *echo.Echo
+	port            int
 }
 
-func NewServer(logger *zap.SugaredLogger) *Server {
+// ServerBuilder is a builder for Server
+type ServerBuilder struct {
+	server *Server
+}
+
+// NewServer creates a new ServerBuilder with required dependencies
+func NewServer(logger *zap.SugaredLogger, port int, ec *routes.EndpointConfig) *Server {
 	// Load environment variables
 	if err := godotenv.Load(); err != nil {
 		logger.Warnf("Warning: .env file not found: %v", err)
@@ -51,42 +48,20 @@ func NewServer(logger *zap.SugaredLogger) *Server {
 	// Serve static files
 	e.Static("/static", staticDir)
 
-	return &Server{}
+	return &Server{
+		echo:            e,
+		port:            port,
+		endPointsConfig: ec,
+	}
+}
+
+// Build builds and returns the final Server
+func (b *ServerBuilder) Build() *Server {
+	return b.server
 }
 
 func (s *Server) Start() error {
-	logger := s.Logger
-
-	//check to see if the private key file exists
-	if _, err := os.Stat(s.JTWPrivateKeyFile); err != nil {
-		logger.Fatalf("Error: error loading %s  private key file: %v", s.JTWPrivateKeyFile, err)
-	}
-	// create endpoint with JWT config
-	ec, err := routes.NewEndpoints(s.JTWPrivateKeyFile, s.PrivateKeyPassphrase)
-	if err != nil {
-		logger.Fatalf("Failed to configure endpoints: %v", err)
-	}
-
-	//Load Users
-	if c, err := security.LoadCredentials(s.UserCredentialsFile); err != nil {
-		return err
-	} else {
-		ec.Users = c
-	}
-	// Initialize Kafka kafkaScoreProducer
-	kp, err := producer.NewKafkaScoreProducer(s.KafkaBootstrapServers, s.KafkaTopic)
-	if err != nil {
-		logger.Fatalf("Failed to create Kafka kafkaScoreProducer: %v", err)
-	}
-	ec.KafkaProducer = kp
-	// Start Kafka producer
-	if err := ec.KafkaProducer.Start(); err != nil {
-		return fmt.Errorf("failed to start Kafka producer: %v", err)
-	}
-
-	// Set ec on to the serv
-	s.endPointsConfig = ec
-
+	ec := s.endPointsConfig
 	// Configure Routes
 	router := s.echo
 	// Login endpoint
@@ -116,7 +91,7 @@ func (s *Server) Start() error {
 		// Configure middleware with the custom claims type
 		config := echojwt.Config{
 			KeyFunc: func(token *jwt.Token) (interface{}, error) {
-				return s.endPointsConfig.Manager.Config.PublicKey, nil
+				return ec.Manager.Config.PublicKey, nil
 			},
 		}
 		admin.Use(echojwt.WithConfig(config))
@@ -124,11 +99,11 @@ func (s *Server) Start() error {
 		admin.POST("/stop", ec.StopGame)
 	}
 	// Start server
-	port := strconv.Itoa(s.Port)
+	port := strconv.Itoa(s.port)
 	if port == "" {
 		port = "8080"
 	}
-	return s.echo.Start(":" + port)
+	return router.Start(":" + port)
 }
 
 func (s *Server) Stop() error {

@@ -1,10 +1,12 @@
 package routes
 
 import (
+	"fmt"
 	"github.com/gorilla/websocket"
 	"github.com/kameshsampath/balloon-popper-server/pkg/models"
 	"github.com/kameshsampath/balloon-popper-server/pkg/producer"
 	"github.com/kameshsampath/balloon-popper-server/pkg/security"
+	"go.uber.org/zap"
 	"net/http"
 	"sync"
 	"time"
@@ -19,6 +21,7 @@ type EndpointConfig struct {
 	KafkaProducer *producer.KafkaScoreProducer
 	upgrader      websocket.Upgrader
 	Users         []models.UserCredentials
+	Logger        *zap.SugaredLogger
 }
 
 // NewEndpoints gives handle to REST EndpointConfig
@@ -27,19 +30,20 @@ func NewEndpoints(privateKeyFile string, passphrase string) (*EndpointConfig, er
 	if err != nil {
 		return nil, err
 	}
+	if kdc.IsEncrypted() && passphrase == "" {
+		return nil, fmt.Errorf("error: passphrase is required to encrypt the private key")
+	}
 	kdc.KeyInfo.SetPassPhrase(passphrase)
 	err = kdc.Decrypt()
 	if err != nil {
 		return nil, err
 	}
-
 	// Initialize WebSocket upgrader
 	upgrader := websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
 			return true // Allow all origins
 		},
 	}
-
 	//build the JWT Config
 	jwtConfig := security.JWTConfig{
 		PrivateKey: kdc.KeyInfo.PrivateKey(),
