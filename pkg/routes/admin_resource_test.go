@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/kameshsampath/balloon-popper-server/pkg/security"
+	echojwt "github.com/labstack/echo-jwt/v4"
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"net/http"
@@ -38,7 +39,7 @@ var (
 	cwd, _                 = os.Getwd()
 	testCredentialsFile    = filepath.Clean(filepath.Join(cwd, "test_users.json"))
 	testPrivateKeyFile     = filepath.Clean(filepath.Join(cwd, "jwt-private-key"))
-	testPrivateKeyPassFile = filepath.Clean(filepath.Join(cwd, ".pass"))
+	testPrivateKeyPassFile = filepath.Join(cwd, ".pass")
 )
 
 func TestLogin(t *testing.T) {
@@ -46,7 +47,7 @@ func TestLogin(t *testing.T) {
 	assert.NoError(t, err)
 	d, err := security.NewRSAKeyDecryptor(testPrivateKeyFile)
 	assert.NoError(t, err)
-	data, err := os.ReadFile(testPrivateKeyPassFile)
+	data, err := os.ReadFile(filepath.Clean(testPrivateKeyPassFile))
 	assert.NoError(t, err)
 	d.KeyInfo.SetPassPhrase(string(data))
 	assert.NoError(t, err)
@@ -108,5 +109,46 @@ func TestLogin(t *testing.T) {
 			// Verify expiration is set correctly (about 1 hour from now)
 			assert.WithinDuration(t, time.Now().Add(time.Hour), claims.ExpiresAt.Time, 5*time.Second)
 		}
+	}
+}
+
+func TestProtectedEndpoints(t *testing.T) {
+	// Setup once
+	e := echo.New()
+	h := &EndpointConfig{}
+
+	config := echojwt.Config{
+		SigningKey:  []byte("your-secret-key"),
+		TokenLookup: "header:Authorization",
+	}
+	jwtMiddleware := echojwt.WithConfig(config)
+
+	// Register all protected routes
+	e.POST("/admin/start", h.StartGame, jwtMiddleware)
+	e.POST("/admin/stop", h.StopGame, jwtMiddleware)
+
+	// Test cases
+	testCases := []struct {
+		name   string
+		method string
+		path   string
+	}{
+		{"StartGame", http.MethodPost, "/admin/start"},
+		{"StopGame", http.MethodPost, "/admin/stop"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create request without token
+			req := httptest.NewRequest(tc.method, tc.path, nil)
+			req.Header.Set("Authorization", "Bearer ")
+			rec := httptest.NewRecorder()
+
+			// Serve the request
+			e.ServeHTTP(rec, req)
+
+			// Assert 401 Unauthorized
+			assert.Equal(t, http.StatusUnauthorized, rec.Code)
+		})
 	}
 }
