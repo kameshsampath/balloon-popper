@@ -65,11 +65,11 @@ func (s *ServerOptions) AddFlags(cmd *cobra.Command) {
 	}
 }
 
-func (s *ServerOptions) Validate(cmd *cobra.Command, args []string) error {
+func (s *ServerOptions) Validate(_ *cobra.Command, _ []string) error {
 	return nil
 }
 
-func (s *ServerOptions) Execute(cmd *cobra.Command, args []string) error {
+func (s *ServerOptions) Execute(_ *cobra.Command, _ []string) error {
 	var err error
 	logLevel := "info"
 	lc := logger.Config{

@@ -41,10 +41,10 @@ func NewVersionCommand() *cobra.Command {
 		Short: "Prints the plugin version",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := cmd.OutOrStdout()
-			fmt.Fprintf(out, "Version:      %s\n", Version)   //nolint:errcheck
-			fmt.Fprintf(out, "Build Date:   %s\n", BuildDate) //nolint:errcheck
-			fmt.Fprintf(out, "Git Revision: %s\n", Commit)    //nolint:errcheck
-			fmt.Fprintf(out, "Built-By: %s\n", BuiltBy)       //nolint:errcheck
+			_, _ = fmt.Fprintf(out, "Version:      %s\n", Version)
+			_, _ = fmt.Fprintf(out, "Build Date:   %s\n", BuildDate)
+			_, _ = fmt.Fprintf(out, "Git Revision: %s\n", Commit)
+			_, _ = fmt.Fprintf(out, "Built-By: %s\n", BuiltBy)
 			return nil
 		},
 	}
