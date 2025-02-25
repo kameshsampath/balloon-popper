@@ -6,7 +6,6 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/kameshsampath/balloon-popper-server/pkg/models"
 	"github.com/labstack/echo/v4"
-	"log"
 	"net/http"
 	"path/filepath"
 	"time"
@@ -35,6 +34,7 @@ func (e *EndpointConfig) GameStatus(c echo.Context) error {
 }
 
 func (e *EndpointConfig) WebSocket(c echo.Context) error {
+	log := e.Logger
 	e.mu.Lock()
 	if !e.gameState.IsActive {
 		e.mu.Unlock()
@@ -61,7 +61,7 @@ func (e *EndpointConfig) WebSocket(c echo.Context) error {
 		e.mu.Lock()
 		e.gameState.CurrentPlayers = removeString(e.gameState.CurrentPlayers, playerName)
 		e.mu.Unlock()
-		log.Printf("Player %s disconnected", playerName)
+		log.Infof("Player %s disconnected", playerName)
 	}()
 
 	for {
@@ -78,12 +78,12 @@ func (e *EndpointConfig) WebSocket(c echo.Context) error {
 		var msg models.GameMessage
 		if err := ws.ReadJSON(&msg); err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Printf("WebSocket error: %v", err)
+				log.Infof("WebSocket error: %v", err)
 			}
 			return nil
 		}
 
-		c.Logger().Printf("Recevied message %s", msg)
+		log.Infof("Recevied message %s", msg)
 
 		// Process game event
 		isFavoriteHit := contains(e.config.CharacterFavorites[msg.Character], msg.BalloonColor)
@@ -102,7 +102,7 @@ func (e *EndpointConfig) WebSocket(c echo.Context) error {
 		// Send to Kafka with context
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		if err := e.KafkaProducer.SendScore(ctx, event); err != nil {
-			log.Printf("Failed to send score to Kafka: %v", err)
+			log.Infof("Failed to send score to Kafka: %v", err)
 		}
 		cancel()
 
@@ -112,7 +112,7 @@ func (e *EndpointConfig) WebSocket(c echo.Context) error {
 			Event: event,
 		}
 		if err := ws.WriteJSON(update); err != nil {
-			log.Printf("Failed to send score update: %v", err)
+			log.Infof("Failed to send score update: %v", err)
 			return nil
 		}
 	}
