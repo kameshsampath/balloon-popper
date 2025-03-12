@@ -64,7 +64,7 @@ func NewLogger(cfg Config) (*zap.SugaredLogger, error) {
 	}
 
 	config.Level = zap.NewAtomicLevelAt(level)
-	config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
+	config.EncoderConfig.EncodeLevel = zapcore.LowercaseLevelEncoder
 	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
 	config.OutputPaths = []string{"stdout"}
 	config.DisableStacktrace = !cfg.Development

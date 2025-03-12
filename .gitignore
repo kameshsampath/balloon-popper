@@ -8,3 +8,4 @@ keys/
 **/.pass
 config
 **/*-key
+http-client.private.env.json

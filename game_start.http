@@ -4,7 +4,7 @@ Content-Type: application/x-www-form-urlencoded
 Accept: application/json
 
 username = {{username}} &
-password = {{$env.BALLOON_POPPER_ADMIN_PASSWORD}}
+password = {{password}}
 
 > {%
     console.log(response.body);
@@ -13,21 +13,9 @@ password = {{$env.BALLOON_POPPER_ADMIN_PASSWORD}}
 
 ###
 # Start Game
-POST https://{{host}}:{{port}}/admin/start
+POST {{host}}:{{port}}/admin/start
 Content-Type: application/json
 Accept: application/json
 Authorization: Bearer {{token}}
 
 {}
-
-
-####
-## Stop the game
-#POST https://{{host}}:{{port}}/admin/stop
-#Content-Type: application/json
-#Accept: application/json
-#Authorization: Bearer {{token}}
-#
-#{}
-#
-####

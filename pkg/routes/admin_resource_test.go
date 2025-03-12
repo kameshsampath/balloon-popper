@@ -152,3 +152,5 @@ func TestProtectedEndpoints(t *testing.T) {
 		})
 	}
 }
+
+//TODO start and stop game tests
