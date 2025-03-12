@@ -1,0 +1,74 @@
+# This is an example .goreleaser.yml file with some sensible defaults.
+# Make sure to check the documentation at https://goreleaser.com
+
+# The lines below are called `modelines`. See `:help modeline`
+# Feel free to remove those if you don't want/need to use them.
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+# vim: set ts=2 sw=2 tw=0 fo=cnqoj
+
+version: 2
+project_name: balloon-popper
+
+before:
+  hooks:
+    # You may remove this if you don't use go modules.
+    - go mod tidy
+
+builds:
+  - id: "balloon-popper"
+    main: "./cmd/"
+    binary: "balloon-popper"
+    ldflags:
+      - "-X github.com/kameshsampath/balloon-popper/pkg/commands.Version={{.Version}}"
+      - "-X github.com/kameshsampath/balloon-popper/pkg/commands.BuildDate={{.Date}}"
+      - "-X github.com/kameshsampath/balloon-popper/pkg/commands.Commit={{.Commit}}"
+      - "-X github.com/kameshsampath/balloon-poppe/pkg/commands.BuiltBy=goreleaser"
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+dockers:
+  - image_templates:
+      - ghcr.io/kameshsampath/balloon-popper
+    build_flag_templates:
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+    goos: linux
+archives:
+  - formats: ["tar.gz"]
+    strip_binary_directory: true
+    name_template: >-
+      {{ .ProjectName }}_ {{- .Os }}_ {{- if eq .Arch "amd64" }}x86_64 {{- else if eq .Arch "386" }}i386 {{- else }}{{
+      .Arch }}{{ end }} {{- if .Arm }}v{{ .Arm }}{{ end }}
+    files:
+      - LICENSE
+      - README.md
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^keys:"
+      - "^work:"
+      - "^config:"
+checksum:
+  name_template: "checksums.txt"
+
+release:
+  draft: false
+  prerelease: "true"
+  name_template: "Release {{ .Tag }}"
+  footer: >-
+
+    ---
+
+    Released by [GoReleaser](https://github.com/goreleaser/goreleaser).
