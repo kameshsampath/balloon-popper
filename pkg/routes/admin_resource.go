@@ -19,8 +19,8 @@ package routes
 
 import (
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/kameshsampath/balloon-popper-server/pkg/models"
-	"github.com/kameshsampath/balloon-popper-server/pkg/security"
+	"github.com/kameshsampath/balloon-popper/pkg/models"
+	"github.com/kameshsampath/balloon-popper/pkg/security"
 	"github.com/labstack/echo/v4"
 	"net/http"
 	"time"

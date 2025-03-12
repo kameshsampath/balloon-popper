@@ -19,11 +19,11 @@ package commands
 
 import (
 	"fmt"
-	"github.com/kameshsampath/balloon-popper-server/pkg/logger"
-	"github.com/kameshsampath/balloon-popper-server/pkg/producer"
-	"github.com/kameshsampath/balloon-popper-server/pkg/routes"
-	"github.com/kameshsampath/balloon-popper-server/pkg/security"
-	"github.com/kameshsampath/balloon-popper-server/pkg/web"
+	"github.com/kameshsampath/balloon-popper/pkg/logger"
+	"github.com/kameshsampath/balloon-popper/pkg/producer"
+	"github.com/kameshsampath/balloon-popper/pkg/routes"
+	"github.com/kameshsampath/balloon-popper/pkg/security"
+	"github.com/kameshsampath/balloon-popper/pkg/web"
 	"github.com/spf13/cobra"
 	"os"
 	"os/signal"

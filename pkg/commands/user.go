@@ -20,9 +20,9 @@ package commands
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/kameshsampath/balloon-popper-server/pkg/logger"
-	"github.com/kameshsampath/balloon-popper-server/pkg/models"
-	"github.com/kameshsampath/balloon-popper-server/pkg/security"
+	"github.com/kameshsampath/balloon-popper/pkg/logger"
+	"github.com/kameshsampath/balloon-popper/pkg/models"
+	"github.com/kameshsampath/balloon-popper/pkg/security"
 	"github.com/spf13/cobra"
 	"golang.org/x/crypto/bcrypt"
 	"os"

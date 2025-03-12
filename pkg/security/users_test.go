@@ -19,7 +19,7 @@ package security
 
 import (
 	"encoding/json"
-	"github.com/kameshsampath/balloon-popper-server/pkg/models"
+	"github.com/kameshsampath/balloon-popper/pkg/models"
 	"github.com/stretchr/testify/assert"
 	"os"
 	"path/filepath"

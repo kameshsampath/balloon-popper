@@ -19,7 +19,7 @@ package commands
 
 import (
 	"fmt"
-	"github.com/kameshsampath/balloon-popper-server/pkg/logger"
+	"github.com/kameshsampath/balloon-popper/pkg/logger"
 	"github.com/spf13/cobra"
 	"os"
 )

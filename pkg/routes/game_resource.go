@@ -21,7 +21,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/gorilla/websocket"
-	"github.com/kameshsampath/balloon-popper-server/pkg/models"
+	"github.com/kameshsampath/balloon-popper/pkg/models"
 	"github.com/labstack/echo/v4"
 	"net/http"
 	"path/filepath"

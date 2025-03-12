@@ -1,4 +1,4 @@
-module github.com/kameshsampath/balloon-popper-server
+module github.com/kameshsampath/balloon-popper
 
 go 1.23.4
 

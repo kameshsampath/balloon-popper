@@ -18,7 +18,7 @@
 package main
 
 import (
-	"github.com/kameshsampath/balloon-popper-server/pkg/commands"
+	"github.com/kameshsampath/balloon-popper/pkg/commands"
 	"os"
 )
 

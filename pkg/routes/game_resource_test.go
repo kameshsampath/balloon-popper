@@ -19,8 +19,8 @@ package routes
 
 import (
 	"encoding/json"
-	"github.com/kameshsampath/balloon-popper-server/pkg/logger"
-	"github.com/kameshsampath/balloon-popper-server/pkg/models"
+	"github.com/kameshsampath/balloon-popper/pkg/logger"
+	"github.com/kameshsampath/balloon-popper/pkg/models"
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"net/http"

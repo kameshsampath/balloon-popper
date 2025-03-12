@@ -20,9 +20,9 @@ package routes
 import (
 	"fmt"
 	"github.com/gorilla/websocket"
-	"github.com/kameshsampath/balloon-popper-server/pkg/models"
-	"github.com/kameshsampath/balloon-popper-server/pkg/producer"
-	"github.com/kameshsampath/balloon-popper-server/pkg/security"
+	"github.com/kameshsampath/balloon-popper/pkg/models"
+	"github.com/kameshsampath/balloon-popper/pkg/producer"
+	"github.com/kameshsampath/balloon-popper/pkg/security"
 	"go.uber.org/zap"
 	"net/http"
 	"sync"

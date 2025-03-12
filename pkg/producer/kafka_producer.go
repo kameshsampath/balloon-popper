@@ -21,7 +21,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/kameshsampath/balloon-popper-server/pkg/models"
+	"github.com/kameshsampath/balloon-popper/pkg/models"
 	"time"
 
 	"github.com/twmb/franz-go/pkg/kgo"

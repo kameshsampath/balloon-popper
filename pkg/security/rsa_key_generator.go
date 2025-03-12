@@ -23,7 +23,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
-	"github.com/kameshsampath/balloon-popper-server/pkg/logger"
+	"github.com/kameshsampath/balloon-popper/pkg/logger"
 	"github.com/youmark/pkcs8"
 	"os"
 	"path"

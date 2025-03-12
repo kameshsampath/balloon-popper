@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/joho/godotenv"
-	"github.com/kameshsampath/balloon-popper-server/pkg/routes"
+	"github.com/kameshsampath/balloon-popper/pkg/routes"
 	echojwt "github.com/labstack/echo-jwt/v4"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -47,7 +47,7 @@ type ServerBuilder struct {
 func NewServer(logger *zap.SugaredLogger, port int, ec *routes.EndpointConfig) *Server {
 	// Load environment variables
 	if err := godotenv.Load(); err != nil {
-		logger.Warnf("Warning: .env file not found: %v", err)
+		logger.Warnf("Warning: .env.docker file not found: %v", err)
 	}
 
 	// Initialize Echo

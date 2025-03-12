@@ -35,7 +35,7 @@ var (
 	BuiltBy string
 )
 
-// NewVersionCommand implements 'kluster version' commands
+// NewVersionCommand implements 'balloon-popper version' commands
 func NewVersionCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
