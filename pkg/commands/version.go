@@ -31,7 +31,7 @@ var (
 	BuildDate string
 	// Commit is the git commit from which this CLI binary was built.
 	Commit string
-	//BuiltBy is the release program that built this binary
+	// BuiltBy is the release program that built this binary
 	BuiltBy string
 )
 
