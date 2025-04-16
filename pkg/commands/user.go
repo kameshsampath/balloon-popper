@@ -18,35 +18,28 @@
 package commands
 
 import (
-	"encoding/json"
 	"fmt"
-	"github.com/kameshsampath/balloon-popper/pkg/logger"
-	"github.com/kameshsampath/balloon-popper/pkg/models"
 	"github.com/kameshsampath/balloon-popper/pkg/security"
 	"github.com/spf13/cobra"
 	"golang.org/x/crypto/bcrypt"
-	"os"
-	"path/filepath"
 )
 
 // UserCreateOptions defines the structure for storing credentials
 type UserCreateOptions struct {
-	credentialsFile string
-	name            string
-	email           string
-	hashPassword    bool
-	password        string
-	role            string
-	username        string
+	secretName   string
+	name         string
+	email        string
+	hashPassword bool
+	password     string
+	role         string
+	username     string
 }
 
 func (u *UserCreateOptions) AddFlags(cmd *cobra.Command) {
 	flags := cmd.Flags()
 
-	flags.StringVarP(&u.credentialsFile, "credentials-file", "c", "./config/users.json",
-		"Path to JSON file containing user credentials")
 	flags.StringVarP(&u.username, "user-name", "u", "",
-		"Create user with specified username if credentials file doesn't exist")
+		"Create user with specified username.")
 	flags.StringVarP(&u.password, "user-password", "p", "",
 		"Password for user")
 	flags.StringVarP(&u.name, "name", "n", "",
@@ -63,13 +56,12 @@ func (u *UserCreateOptions) AddFlags(cmd *cobra.Command) {
 	cobra.CheckErr(cmd.MarkFlagRequired("user-password"))
 }
 
-func (u *UserCreateOptions) Validate(cmd *cobra.Command, args []string) error {
+func (u *UserCreateOptions) Validate(_ *cobra.Command, _ []string) error {
 	return nil
 }
 
-func (u *UserCreateOptions) Execute(cmd *cobra.Command, args []string) error {
-	log := logger.Get()
-
+func (u *UserCreateOptions) Execute(_ *cobra.Command, _ []string) error {
+	u.secretName = fmt.Sprintf("bgd-user-%s", u.username)
 	// If hash-password flag is set, just output the hash and exit
 	if u.hashPassword {
 		password := u.password
@@ -82,12 +74,6 @@ func (u *UserCreateOptions) Execute(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Create directory if needed
-	dir := filepath.Dir(u.credentialsFile)
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		return fmt.Errorf("failed to create directory %s: %w", dir, err)
-	}
-
 	// Hash password
 	hash, err := bcrypt.GenerateFromPassword([]byte(u.password), bcrypt.DefaultCost)
 	if err != nil {
@@ -97,45 +83,18 @@ func (u *UserCreateOptions) Execute(cmd *cobra.Command, args []string) error {
 	if u.name == "" {
 		u.name = u.username
 	}
+
 	// Create user
-	user := models.UserCredentials{
+	user := security.UserCredentials{
 		Username: u.username,
 		Password: string(hash),
 		Name:     u.name,
 		Email:    u.email,
 		Role:     u.role,
 	}
-	// Check if credentials file exists
-	users := make([]models.UserCredentials, 0)
-	if _, err := os.Stat(u.credentialsFile); os.IsNotExist(err) {
-		users = append(users, user)
-		if err := u.writeUsers(users); err != nil {
-			return err
-		}
-		log.Infof("Created user '%s' in %s", u.username, u.credentialsFile)
-		return nil
-	}
-	if users, err = security.LoadCredentials(u.credentialsFile); err != nil {
+
+	if err := user.WriteCredentials(u.secretName); err != nil {
 		return err
-	}
-	users = append(users, user)
-	if err := u.writeUsers(users); err != nil {
-		return err
-	}
-	log.Infof("Added user '%s' in %s", u.username, u.credentialsFile)
-
-	return nil
-}
-
-func (u *UserCreateOptions) writeUsers(users []models.UserCredentials) error {
-	// Write to file
-	data, err := json.MarshalIndent(users, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal user data: %w", err)
-	}
-
-	if err := os.WriteFile(u.credentialsFile, data, 0600); err != nil {
-		return fmt.Errorf("failed to write credentials file: %w", err)
 	}
 
 	return nil
@@ -146,13 +105,13 @@ var userCommandExample = fmt.Sprintf(`
   %[1]s user --user-name admin --user-password secretpassword
 
   # Create a user with explicit path to credentials file
-  %[1]s user -u manager -w managerpass -c /app/data/users.json
+  %[1]s user -u manager -w managerpass -s kameshs-demo-admin-user
 
   # Generate a bcrypt hash for a password
-  %[1]s user -u someuser -w complexpass -h
+  %[1]s user -u someuser -p complexpass --std-out
 
   # Short form with all options
-  %[1]s user -u admin -w adminpass -c /custom/path/creds.json
+  %[1]s user -u admin -p adminpass -s kameshs-demo-admin-user
 `, ExamplePrefix())
 
 func NewUserCommand() *cobra.Command {
@@ -160,8 +119,11 @@ func NewUserCommand() *cobra.Command {
 	userCreateOpts := &UserCreateOptions{}
 
 	userCommand := &cobra.Command{
-		Use:     "user",
-		Short:   "Create a new user",
+		Use:   "user",
+		Short: "Create a new user and save it AWS Secrets Manager",
+		Long: `
+Create a new user and save it AWS Secrets Manager. A secret will be generated for each user.
+`,
 		Example: userCommandExample,
 		RunE:    userCreateOpts.Execute,
 		PreRunE: userCreateOpts.Validate,

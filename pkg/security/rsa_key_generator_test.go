@@ -21,26 +21,14 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/stretchr/testify/assert"
-	"os"
 	"testing"
 )
 
 func TestGenerateKeyPairWithPassphrase(t *testing.T) {
-	var awsRegion string
-	var err error
-	if v, ok := os.LookupEnv("AWS_REGION"); ok {
-		awsRegion = v
-	} else {
-		awsRegion = "us-west-2"
-	}
-	cfg, err := config.LoadDefaultConfig(context.TODO(),
-		config.WithRegion(awsRegion),
-	)
+	_, err := InitAndGetAWSSecretManagerClient()
 	assert.Nil(t, err)
-
 	kgc, err := NewRSAKeyGenerator(0)
 	assert.Nil(t, err)
 	assert.NotNil(t, kgc)
@@ -48,7 +36,6 @@ func TestGenerateKeyPairWithPassphrase(t *testing.T) {
 	kgc.KeyInfo.passphrase = []byte("password123")
 	err = kgc.GenerateAndSaveKeyPair()
 	assert.Nil(t, err)
-	client = secretsmanager.NewFromConfig(cfg)
 	err = kgc.VerifyKeyPair()
 	assert.Nil(t, err)
 	//Cleanup
@@ -57,17 +44,7 @@ func TestGenerateKeyPairWithPassphrase(t *testing.T) {
 }
 
 func TestGenerateKeyPairWithoutPassphrase(t *testing.T) {
-	var awsRegion string
-	var err error
-	if v, ok := os.LookupEnv("AWS_REGION"); ok {
-		awsRegion = v
-	} else {
-		awsRegion = "us-west-2"
-	}
-	cfg, err := config.LoadDefaultConfig(context.TODO(),
-		config.WithRegion(awsRegion),
-	)
-	client = secretsmanager.NewFromConfig(cfg)
+	_, err := InitAndGetAWSSecretManagerClient()
 	assert.Nil(t, err)
 
 	kgc, err := NewRSAKeyGenerator(0)
@@ -85,7 +62,7 @@ func TestGenerateKeyPairWithoutPassphrase(t *testing.T) {
 	assert.Nil(t, err)
 	str := *sv.SecretString
 	assert.NotNil(t, str)
-	var epk encryptedKeyPair
+	var epk EncryptedKeyPair
 	err = json.Unmarshal([]byte(str), &epk)
 	assert.Nil(t, err)
 	assert.NotNil(t, epk)

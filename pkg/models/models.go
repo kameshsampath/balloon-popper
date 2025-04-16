@@ -85,15 +85,6 @@ type SessionStats struct {
 	PlayerList      []string  `json:"player_list,omitempty"`
 }
 
-// UserCredentials defines the structure for storing credentials
-type UserCredentials struct {
-	Username string `json:"username"`
-	Name     string `json:"name"`
-	Password string `json:"password_hash"` // Stores bcrypt hash
-	Email    string `json:"email"`
-	Role     string `json:"role"`
-}
-
 // NewGameConfig creates a new GameConfig with default values
 func NewGameConfig() *GameConfig {
 	bonusProb, err := strconv.ParseFloat(os.Getenv("BONUS_PROBABILITY"), 64)

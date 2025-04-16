@@ -1,9 +1,0 @@
-[
-  {
-    "username": "admin",
-    "name": "Balloon Popper Admin",
-    "password_hash": "$2a$10$x5NssQrS0n1QfyR4ZTB58OOHVrm6F/dFBiYkxaO2ekspZt0bwgZM6",
-    "email": "balloon-game-admin@example.com",
-    "role": "admin"
-  }
-]

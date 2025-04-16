@@ -20,40 +20,28 @@ package security
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/assert"
-	"os"
 	"testing"
 	"time"
 )
 
 func TestGenerateToken(t *testing.T) {
-	var awsRegion string
-	var err error
-
 	kgc, err := NewRSAKeyGenerator(0)
 	assert.Nil(t, err)
 	assert.NotNil(t, kgc)
-	kgc.SecretName = "kameshs-bgd-jwt-secret-1"
+	suffix := time.Now().UnixMilli()
+	kgc.SecretName = fmt.Sprintf("kameshs-bgd-jwt-secret-%d", suffix)
 	kgc.KeyInfo.passphrase = []byte("password123")
 	err = kgc.GenerateAndSaveKeyPair()
 	assert.Nil(t, err)
 
-	//Load PK via AWS Secret and update KGC
-	if v, ok := os.LookupEnv("AWS_REGION"); ok {
-		awsRegion = v
-	} else {
-		awsRegion = "us-west-2"
-	}
-	cfg, err := config.LoadDefaultConfig(context.TODO(),
-		config.WithRegion(awsRegion),
-	)
-	client = secretsmanager.NewFromConfig(cfg)
-	assert.Nil(t, err)
+	client, err = InitAndGetAWSSecretManagerClient()
+	assert.NoError(t, err)
 
 	//Get secret
 	sv, err := client.GetSecretValue(context.Background(), &secretsmanager.GetSecretValueInput{
@@ -62,17 +50,16 @@ func TestGenerateToken(t *testing.T) {
 	assert.Nil(t, err)
 	str := *sv.SecretString
 	assert.NotNil(t, str)
-	var epk encryptedKeyPair
+	var epk EncryptedKeyPair
 	err = json.Unmarshal([]byte(str), &epk)
 	assert.Nil(t, err)
 	assert.NotNil(t, epk)
 
-	kgc.KeyInfo.passphrase = []byte(epk.Passphrase)
 	kgc.KeyInfo.SetPassPhrase(epk.Passphrase)
-	privKey, err := kgc.decodePrivateKey(epk.EncryptedPrivateKey)
+	privKey, err := kgc.DecodePrivateKey(epk.EncryptedPrivateKey)
 	assert.Nil(t, err)
 	assert.NotNil(t, privKey)
-	pubKey, err := kgc.decodePublicKey(epk.PublicKey)
+	pubKey, err := kgc.DecodePublicKey(epk.PublicKey)
 	assert.Nil(t, err)
 	assert.NotNil(t, pubKey)
 

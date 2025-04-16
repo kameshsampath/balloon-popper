@@ -18,9 +18,13 @@
 package routes
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/kameshsampath/balloon-popper/pkg/logger"
 	"github.com/kameshsampath/balloon-popper/pkg/security"
 	echojwt "github.com/labstack/echo-jwt/v4"
 	"github.com/labstack/echo/v4"
@@ -28,37 +32,95 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 )
 
-var (
-	cwd, _                 = os.Getwd()
-	testCredentialsFile    = filepath.Clean(filepath.Join(cwd, "test_users.json"))
-	testPrivateKeyFile     = filepath.Clean(filepath.Join(cwd, "jwt-private-key"))
-	testPrivateKeyPassFile = filepath.Join(cwd, ".pass")
+const (
+	testUser         = "testUser"
+	testUserName     = "testUserName"
+	testUserEmail    = "testuser@example.com"
+	testPassword     = "sup3rSecret!"
+	testPasswordHash = "$2a$10$kaH32ILCHvagRK.f3girQO29Ccyp7Lw40bMEnA8zhow4ke3alhTXq"
+	testUserRole     = "admin"
 )
 
+var (
+	client         *secretsmanager.Client
+	err            error
+	jwtSecretName  string
+	userSecretName string
+	kgc            *security.Config
+)
+
+func init() {
+	suffix := time.Now().UnixMilli()
+	jwtSecretName = fmt.Sprintf("kameshs-bgd-server-admin-test-%d", suffix)
+	userSecretName = fmt.Sprintf("bgd-user-test-%d", suffix)
+	client, err = security.InitAndGetAWSSecretManagerClient()
+	if err != nil {
+		panic(err)
+	}
+	//write the test credentials to AWS Secret Manager
+	var u security.UserCredentials
+	ustr := fmt.Sprintf(`{
+"username": "%s",
+"name": "%s",
+"password_hash": "%s",
+"email": "%s",
+"role": "%s"
+}`, testUser, testUserName, testPasswordHash, testUserEmail, testUserRole)
+	err = json.Unmarshal([]byte(ustr), &u)
+	if err != nil {
+		panic(err)
+	}
+
+	err = u.WriteCredentials(userSecretName)
+	if err != nil {
+		panic(err)
+	}
+	//write test jwt-keys to AWS Secret Manager
+	kgc, err = security.NewRSAKeyGenerator(0)
+	if err != nil {
+		panic(err)
+	}
+	kgc.SecretName = jwtSecretName
+	//Generate and save key
+	err = kgc.GenerateAndSaveKeyPair()
+	err = kgc.VerifyKeyPair()
+	if err != nil {
+		panic(err)
+	}
+}
 func TestLogin(t *testing.T) {
-	users, err := security.LoadCredentials(testCredentialsFile)
-	assert.NoError(t, err)
-	d, err := security.NewRSAKeyDecryptor(testPrivateKeyFile)
-	assert.NoError(t, err)
-	data, err := os.ReadFile(filepath.Clean(testPrivateKeyPassFile))
-	assert.NoError(t, err)
-	d.KeyInfo.SetPassPhrase(string(data))
-	assert.NoError(t, err)
-	assert.NotNil(t, d)
-	err = d.Decrypt()
-	assert.NoError(t, err)
-	e := echo.New()
+	log := logger.Get()
+	log.Infof("Loading credentials secret %s", userSecretName)
 	// Create form data
 	form := url.Values{}
-	form.Add("username", "admin")
-	form.Add("password", "sup3rSecret!")
+	form.Add("username", testUser)
+	form.Add("password", testPassword)
+
+	//Load JWT Keys
+	sv, err := client.GetSecretValue(context.Background(), &secretsmanager.GetSecretValueInput{
+		SecretId: aws.String(jwtSecretName),
+	})
+	assert.NoError(t, err)
+	str := *sv.SecretString
+	assert.NotNil(t, str)
+	var epk security.EncryptedKeyPair
+	err = json.Unmarshal([]byte(str), &epk)
+	assert.NoError(t, err)
+	assert.NotNil(t, epk)
+
+	kgc.KeyInfo.SetPassPhrase(epk.Passphrase)
+	privKey, err := kgc.DecodePrivateKey(epk.EncryptedPrivateKey)
+	assert.NoError(t, err)
+	assert.NotNil(t, privKey)
+	pubKey, err := kgc.DecodePublicKey(epk.PublicKey)
+	assert.NoError(t, err)
+	assert.NotNil(t, pubKey)
+
 	//Create request
 	req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(form.Encode()))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationForm)
@@ -67,15 +129,17 @@ func TestLogin(t *testing.T) {
 	rec := httptest.NewRecorder()
 	//Endpoint Config
 	ec := EndpointConfig{
-		Users: users,
+		UserSecretName: userSecretName,
 		Manager: &security.JWTManager{
 			Config: security.JWTConfig{
-				PrivateKey: d.KeyInfo.PrivateKey(),
-				PublicKey:  d.KeyInfo.PublicKey(),
+				PrivateKey: privKey,
+				PublicKey:  pubKey,
 			},
 		},
 	}
+
 	//Fire the request
+	e := echo.New()
 	if c := e.NewContext(req, rec); assert.NoError(t, ec.Login(c)) {
 		assert.Equal(t, 200, rec.Code)
 
@@ -94,22 +158,26 @@ func TestLogin(t *testing.T) {
 			if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
 				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 			}
-			return d.KeyInfo.PublicKey(), nil
+			return pubKey, nil
 		})
 		assert.NoError(t, err)
 		assert.True(t, parsedToken.Valid)
 
 		// Verify the claims
 		if claims, ok := parsedToken.Claims.(*security.JWTClaims); assert.True(t, ok) {
-			assert.Equal(t, "admin", claims.Username)
-			assert.Equal(t, "admin", claims.Name)
-			assert.Equal(t, "balloon-game-admin@example.com", claims.Email)
-			assert.Equal(t, "admin", claims.Role)
+			assert.Equal(t, testUser, claims.Username)
+			assert.Equal(t, testUserName, claims.Name)
+			assert.Equal(t, testUserEmail, claims.Email)
+			assert.Equal(t, testUserRole, claims.Role)
 			assert.NotZero(t, claims.ExpiresAt)
 			// Verify expiration is set correctly (about 1 hour from now)
 			assert.WithinDuration(t, time.Now().Add(time.Hour), claims.ExpiresAt.Time, 5*time.Second)
 		}
 	}
+	_, err = client.DeleteSecret(context.Background(), &secretsmanager.DeleteSecretInput{SecretId: aws.String(jwtSecretName)})
+	assert.NoError(t, err)
+	_, err = client.DeleteSecret(context.Background(), &secretsmanager.DeleteSecretInput{SecretId: aws.String(userSecretName)})
+	assert.NoError(t, err)
 }
 
 func TestProtectedEndpoints(t *testing.T) {

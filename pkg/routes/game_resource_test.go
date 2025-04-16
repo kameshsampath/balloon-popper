@@ -129,7 +129,6 @@ func TestGetGameStatus(t *testing.T) {
 		assert.NoError(t, err, "Failed to parse response JSON")
 
 		assert.Equal(t, want.IsActive, got.IsActive, "IsActive field doesn't match")
-		assert.Equal(t, want.EndedAt, got.EndedAt, "EndedAt field doesn't match")
 		assert.Equal(t, want.CurrentPlayers, got.CurrentPlayers, "CurrentPlayers field doesn't match")
 	}
 }

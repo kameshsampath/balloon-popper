@@ -18,51 +18,48 @@
 package security
 
 import (
+	"context"
 	"encoding/json"
-	"github.com/kameshsampath/balloon-popper/pkg/models"
+	"fmt"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/stretchr/testify/assert"
-	"os"
-	"path/filepath"
 	"testing"
+	"time"
 )
 
-func TestLoadCredentials(t *testing.T) {
-	cwd, _ := os.Getwd()
-	credentialsFile := filepath.Clean(filepath.Join(cwd, "test_users.json"))
-	var want models.UserCredentials
-	err := json.Unmarshal([]byte(`{
-"username": "admin",
-"name": "Balloon Popper Admin",
+func TestLoadAndVerifyCredentials(t *testing.T) {
+	_, err := InitAndGetAWSSecretManagerClient()
+	assert.Nil(t, err)
+
+	//write the credentials to AWS Secret Manager
+	var u UserCredentials
+	err = json.Unmarshal([]byte(`{
+"username": "test",
+"name": "Balloon Popper Test Admin",
 "password_hash": "$2a$10$x5NssQrS0n1QfyR4ZTB58OOHVrm6F/dFBiYkxaO2ekspZt0bwgZM6",
-"email": "balloon-game-admin@example.com",
+"email": "balloon-game-test-admin@example.com",
 "role": "admin"
-}`), &want)
+}`), &u)
+	assert.NoError(t, err)
+	suffix := time.Now().UnixMilli()
+	err = u.WriteCredentials(fmt.Sprintf("bgd-user-%s-%d", u.Username, suffix))
+	assert.NoError(t, err)
+
+	//Verify credentials
+	err = u.VerifyLogin("admin", "sup3rSecret!")
 	assert.Nil(t, err)
-	creds, err := LoadCredentials(credentialsFile)
+
+	//clean up
+	err = u.deleteTestSecret()
 	assert.Nil(t, err)
-	assert.NotNil(t, creds)
-	assert.Lenf(t, creds, 1, "Expected 1 credentials, got %d", len(creds))
-	got := creds[0]
-	assert.Equalf(t, want, got, "Expected credentials to match")
 }
 
-func TestVerifyLogin(t *testing.T) {
-	cwd, _ := os.Getwd()
-	credentialsFile := filepath.Clean(filepath.Join(cwd, "test_users.json"))
-	var want *models.UserCredentials
-	err := json.Unmarshal([]byte(`{
-"username": "admin",
-"name": "Balloon Popper Admin",
-"password_hash": "$2a$10$x5NssQrS0n1QfyR4ZTB58OOHVrm6F/dFBiYkxaO2ekspZt0bwgZM6",
-"email": "balloon-game-admin@example.com",
-"role": "admin"
-}`), &want)
-	assert.Nil(t, err)
-	creds, err := LoadCredentials(credentialsFile)
-	assert.Nil(t, err)
-	assert.NotNil(t, creds)
-	//check with the test user password
-	got := VerifyLogin("admin", "sup3rSecret!", creds)
-	assert.NotNil(t, got)
-	assert.Equalf(t, want, got, "Expected credentials to match")
+func (u *UserCredentials) deleteTestSecret() error {
+	sid := fmt.Sprintf("bgd-user-%s", u.Username)
+	_, err := client.DeleteSecret(context.TODO(), &secretsmanager.DeleteSecretInput{
+		SecretId:                   aws.String(sid),
+		ForceDeleteWithoutRecovery: aws.Bool(true),
+	})
+	return err
 }

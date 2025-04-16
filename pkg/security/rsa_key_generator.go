@@ -28,7 +28,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager/types"
 	"github.com/kameshsampath/balloon-popper/pkg/logger"
@@ -41,12 +40,11 @@ const (
 )
 
 var (
-	_      RSAKeyGenerator = (*Config)(nil)
-	client *secretsmanager.Client
+	_ RSAKeyGenerator = (*Config)(nil)
 )
 
-// encryptedKeyPair represents a structure for storing encrypted key information
-type encryptedKeyPair struct {
+// EncryptedKeyPair represents a structure for storing encrypted key information
+type EncryptedKeyPair struct {
 	EncryptedPrivateKey string `json:"private_key"`
 	PublicKey           string `json:"public_key"`
 	Passphrase          string `json:"passphrase"`
@@ -56,28 +54,10 @@ type encryptedKeyPair struct {
 
 // NewRSAKeyGenerator creates the new instance of generator
 func NewRSAKeyGenerator(bits int) (*Config, error) {
-	var awsRegion string
-	var err error
-	if v, ok := os.LookupEnv("AWS_REGION"); ok {
-		awsRegion = v
-	} else {
-		awsRegion = "us-west-2"
-	}
-	// Load AWS configuration
-	cfg, err := config.LoadDefaultConfig(context.TODO(),
-		config.WithRegion(awsRegion),
-	)
-	if err != nil {
-		return nil, err
-	}
-
 	// set the encrypting bits to 4096 by default
 	if bits == 0 {
 		bits = 4096
 	}
-	// Initialize the Secrets Manager client
-	client = secretsmanager.NewFromConfig(cfg)
-	logger.Get().Infof("Using AWS Region: %s", awsRegion)
 	return &Config{
 		KeyInfo: &KeyInfo{
 			bits: bits,
@@ -108,7 +88,7 @@ func (c *Config) GenerateAndSaveKeyPair() error {
 		os.Exit(1)
 	}
 
-	keyPair := encryptedKeyPair{
+	keyPair := EncryptedKeyPair{
 		EncryptedPrivateKey: privKey,
 		PublicKey:           pubKey,
 		Passphrase:          string(c.KeyInfo.passphrase),
@@ -123,6 +103,10 @@ func (c *Config) GenerateAndSaveKeyPair() error {
 	}
 
 	// Create the secret with KMS encryption
+	_, err = InitAndGetAWSSecretManagerClient()
+	if err != nil {
+		return err
+	}
 	so, err := client.CreateSecret(context.TODO(), &secretsmanager.CreateSecretInput{
 		Name:         aws.String(c.SecretName),
 		SecretString: aws.String(string(secretValue)),
@@ -157,6 +141,9 @@ func (c *Config) GenerateAndSaveKeyPair() error {
 			return err
 		}
 		log.Infof("Updated existing encrypted key pair secret: %s, with ARN: %s", c.SecretName, *po.ARN)
+	} else if err != nil {
+		log.Errorf("Error:%v", err)
+		return err
 	} else {
 		log.Infof("Created new encrypted key pair secret: %s, with ARN: %s", c.SecretName, *so.ARN)
 	}
@@ -186,7 +173,7 @@ func (c *Config) VerifyKeyPair() error {
 		return fmt.Errorf("failed to unmarshal secret data: %v", err)
 	}
 
-	_, err = c.decodePrivateKey(keyData.PrivateKey)
+	_, err = c.DecodePrivateKey(keyData.PrivateKey)
 
 	if err != nil {
 		return err
@@ -195,8 +182,8 @@ func (c *Config) VerifyKeyPair() error {
 	return nil
 }
 
-// decodePrivateKey decodes a PEM-encoded PKCS#8 private key string and returns an RSA private key
-func (c *Config) decodePrivateKey(privateKeyPEM string) (*rsa.PrivateKey, error) {
+// DecodePrivateKey decodes a PEM-encoded PKCS#8 private key string and returns an RSA private key
+func (c *Config) DecodePrivateKey(privateKeyPEM string) (*rsa.PrivateKey, error) {
 	// Decode PEM block
 	block, _ := pem.Decode([]byte(privateKeyPEM))
 	if block == nil {
@@ -234,8 +221,8 @@ func (c *Config) decodePrivateKey(privateKeyPEM string) (*rsa.PrivateKey, error)
 	return rsaKey, nil
 }
 
-// decodePublicKey decodes a PEM-encoded PKCS#8 public key string and returns an RSA public key
-func (c *Config) decodePublicKey(publicKeyPEM string) (*rsa.PublicKey, error) {
+// DecodePublicKey decodes a PEM-encoded PKCS#8 public key string and returns an RSA public key
+func (c *Config) DecodePublicKey(publicKeyPEM string) (*rsa.PublicKey, error) {
 	// Decode PEM block
 	block, _ := pem.Decode([]byte(publicKeyPEM))
 	if block == nil {

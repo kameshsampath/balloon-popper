@@ -22,7 +22,6 @@ import (
 	"github.com/kameshsampath/balloon-popper/pkg/logger"
 	"github.com/kameshsampath/balloon-popper/pkg/producer"
 	"github.com/kameshsampath/balloon-popper/pkg/routes"
-	"github.com/kameshsampath/balloon-popper/pkg/security"
 	"github.com/kameshsampath/balloon-popper/pkg/web"
 	"github.com/spf13/cobra"
 	"os"
@@ -33,12 +32,10 @@ import (
 var appLogger = logger.Get()
 
 type ServerOptions struct {
-	privateKeyFile        string
-	privateKeyPassword    string
+	jwtKeysSecretName     string
 	kafkaBootstrapServers string
 	kafkaTopic            string
 	port                  int
-	userCredentialsFile   string
 	verbose               bool
 }
 
@@ -46,20 +43,14 @@ func (s *ServerOptions) AddFlags(cmd *cobra.Command) {
 	flags := cmd.Flags()
 
 	// Add flags
-	flags.StringVarP(&s.privateKeyFile, "key-file", "k", "", "Path to the private key file")
-	flags.StringVarP(&s.privateKeyPassword, "key-password", "p", "", "Password for the private key")
+	flags.StringVarP(&s.jwtKeysSecretName, "jwt-keys-secret", "k", "", "The AWS Secret to load JWT RSA Key Pair")
 	flags.StringVarP(&s.kafkaBootstrapServers, "kafka-servers", "s", "localhost:19094", "Kafka bootstrap servers")
 	flags.StringVarP(&s.kafkaTopic, "kafka-topic", "t", "balloon-game", "Kafka topic to send balloon game scores")
 	flags.IntVarP(&s.port, "port", "P", 8080, "Server port")
-	flags.StringVarP(&s.userCredentialsFile, "credentials-file", "c", "", "Path to user credentials file")
 	flags.BoolVarP(&s.verbose, "verbose", "v", false, "Enable verbose mode")
 
 	// Mark required flags
-	err := cmd.MarkFlagRequired("key-file")
-	if err != nil {
-		appLogger.Fatal(err)
-	}
-	err = cmd.MarkFlagRequired("credentials-file")
+	err := cmd.MarkFlagRequired("jwt-keys-secret")
 	if err != nil {
 		appLogger.Fatal(err)
 	}
@@ -84,22 +75,14 @@ func (s *ServerOptions) Execute(_ *cobra.Command, _ []string) error {
 	if appLogger, err = logger.NewLogger(lc); err != nil {
 		appLogger.Warnf("Unable to initialize logger: %v.Using defaults.", err)
 	}
-	//check to see if the private key file exists
-	if _, err := os.Stat(s.privateKeyFile); err != nil {
-		return fmt.Errorf("Error: error loading %s  private key file: %v", s.privateKeyFile, err)
-	}
+
 	// create endpoint with JWT config
-	ec, err := routes.NewEndpoints(s.privateKeyFile, s.privateKeyPassword)
+	ec, err := routes.NewEndpoints(s.jwtKeysSecretName)
 	if err != nil {
 		return err
 	}
 	ec.Logger = appLogger
-	//Load Users
-	if c, err := security.LoadCredentials(s.userCredentialsFile); err != nil {
-		return err
-	} else {
-		ec.Users = c
-	}
+
 	// Initialize Kafka kafkaScoreProducer
 	kp, err := producer.NewKafkaScoreProducer(s.kafkaBootstrapServers, s.kafkaTopic)
 	if err != nil {

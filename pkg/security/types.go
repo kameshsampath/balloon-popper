@@ -19,22 +19,8 @@ package security
 
 import (
 	"crypto/rsa"
-	"errors"
 	"github.com/golang-jwt/jwt/v5"
 	"time"
-)
-
-const (
-	DefaultPrivateKeyFileName = "jwt-test-key.pem"
-	DefaultPublicKeyFileName  = "jwt-test-key.pub"
-	BlockTypeEncrypted        = "ENCRYPTED PRIVATE KEY"
-)
-
-var (
-	ErrEmptyPEM         = errors.New("PEM data is empty")
-	ErrNotPEMFormat     = errors.New("not a PEM format")
-	ErrNotRSAPrivateKey = errors.New("not an RSA private key")
-	ErrInvalidKeyFormat = errors.New("invalid key format: only PKCS#8 format is supported")
 )
 
 // RSAKeyGenerator handles RSA key pair generation and verification
@@ -93,6 +79,15 @@ type JWTClaims struct {
 // JWTManager handles JWT operations
 type JWTManager struct {
 	Config JWTConfig
+}
+
+// UserCredentials defines the structure for storing credentials
+type UserCredentials struct {
+	Username string `json:"username"`
+	Name     string `json:"name"`
+	Password string `json:"password_hash"` // Stores bcrypt hash
+	Email    string `json:"email"`
+	Role     string `json:"role"`
 }
 
 // JWTTokenCommand handles JWT commands

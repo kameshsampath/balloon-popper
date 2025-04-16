@@ -18,7 +18,10 @@
 package routes
 
 import (
-	"fmt"
+	"context"
+	"encoding/json"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/gorilla/websocket"
 	"github.com/kameshsampath/balloon-popper/pkg/models"
 	"github.com/kameshsampath/balloon-popper/pkg/producer"
@@ -31,30 +34,48 @@ import (
 
 // EndpointConfig is the marker interface for defining routes
 type EndpointConfig struct {
-	Manager       *security.JWTManager
-	mu            sync.RWMutex // For thread-safe gameState access
-	gameState     *models.GameState
-	config        *models.GameConfig
-	KafkaProducer *producer.KafkaScoreProducer
-	upgrader      websocket.Upgrader
-	Users         []models.UserCredentials
-	Logger        *zap.SugaredLogger
+	Manager        *security.JWTManager
+	mu             sync.RWMutex // For thread-safe gameState access
+	gameState      *models.GameState
+	config         *models.GameConfig
+	KafkaProducer  *producer.KafkaScoreProducer
+	upgrader       websocket.Upgrader
+	UserSecretName string
+	Logger         *zap.SugaredLogger
 }
 
 // NewEndpoints gives handle to REST EndpointConfig
-func NewEndpoints(privateKeyFile string, passphrase string) (*EndpointConfig, error) {
-	kdc, err := security.NewRSAKeyDecryptor(privateKeyFile)
+func NewEndpoints(jwtKeysSecretName string) (*EndpointConfig, error) {
+
+	client, err := security.InitAndGetAWSSecretManagerClient()
 	if err != nil {
 		return nil, err
 	}
-	if kdc.IsEncrypted() && passphrase == "" {
-		return nil, fmt.Errorf("error: passphrase is required to encrypt the private key")
-	}
-	kdc.KeyInfo.SetPassPhrase(passphrase)
-	err = kdc.Decrypt()
+
+	//Get secret
+	sv, err := client.GetSecretValue(context.Background(), &secretsmanager.GetSecretValueInput{
+		SecretId: aws.String(jwtKeysSecretName),
+	})
+
 	if err != nil {
 		return nil, err
 	}
+	str := *sv.SecretString
+	var epk security.EncryptedKeyPair
+	err = json.Unmarshal([]byte(str), &epk)
+
+	kgc := security.Config{}
+	kgc.KeyInfo.SetPassPhrase(epk.Passphrase)
+
+	privKey, err := kgc.DecodePrivateKey(epk.EncryptedPrivateKey)
+	if err != nil {
+		return nil, err
+	}
+	pubKey, err := kgc.DecodePublicKey(epk.PublicKey)
+	if err != nil {
+		return nil, err
+	}
+
 	// Initialize WebSocket upgrader
 	upgrader := websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
@@ -63,8 +84,8 @@ func NewEndpoints(privateKeyFile string, passphrase string) (*EndpointConfig, er
 	}
 	//build the JWT Config
 	jwtConfig := security.JWTConfig{
-		PrivateKey: kdc.KeyInfo.PrivateKey(),
-		PublicKey:  kdc.KeyInfo.PublicKey(),
+		PrivateKey: privKey,
+		PublicKey:  pubKey,
 		ExpiryTime: 1 * time.Hour,
 		Issuer:     "BalloonPopper",
 	}
