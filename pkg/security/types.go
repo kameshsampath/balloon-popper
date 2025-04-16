@@ -39,9 +39,9 @@ var (
 
 // RSAKeyGenerator handles RSA key pair generation and verification
 type RSAKeyGenerator interface {
-	// GenerateKeyPair creates a new RSA key pair
-	GenerateKeyPair() error // Fixed typo from "GeneratorKeyPair"
-	//VerifyKeyPair verifies the Generated Key pair like able to decrypt with passphrase
+	// GenerateAndSaveKeyPair creates a new RSA key pair and saves it to AWS Secret Manager
+	GenerateAndSaveKeyPair() error // Fixed typo from "GeneratorKeyPair"
+	//VerifyKeyPair verifies the Generated Key pair by retrieving from AWS Secret Manager
 	VerifyKeyPair() error
 }
 
@@ -55,11 +55,9 @@ type KeyInfo struct { // Removed RSA prefix as it's redundant given the package 
 
 // Config configures the RSA keypair generation
 type Config struct {
-	//PrivateKeyFile is the absolute path to save the generated Private Key
-	PrivateKeyFile string
-	//PublicKeyFile is the absolute path to save the generated Public Key
-	PublicKeyFile string
-	KeyInfo       *KeyInfo
+	//SecretName is the AWS Secret Manager Key Name for the RSA KeyPair
+	SecretName string
+	KeyInfo    *KeyInfo
 }
 
 // PrivateKeyDecryptorConfig defines the Private Key decryptor Config

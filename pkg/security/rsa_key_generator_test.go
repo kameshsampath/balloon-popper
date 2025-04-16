@@ -18,52 +18,87 @@
 package security
 
 import (
-	"fmt"
+	"context"
+	"encoding/json"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/stretchr/testify/assert"
 	"os"
-	"path"
-	"path/filepath"
 	"testing"
 )
 
 func TestGenerateKeyPairWithPassphrase(t *testing.T) {
-	kgc := NewRSAKeyGenerator(0)
+	var awsRegion string
+	var err error
+	if v, ok := os.LookupEnv("AWS_REGION"); ok {
+		awsRegion = v
+	} else {
+		awsRegion = "us-west-2"
+	}
+	cfg, err := config.LoadDefaultConfig(context.TODO(),
+		config.WithRegion(awsRegion),
+	)
+	assert.Nil(t, err)
+
+	kgc, err := NewRSAKeyGenerator(0)
+	assert.Nil(t, err)
 	assert.NotNil(t, kgc)
-	kgc.PrivateKeyFile = DefaultPrivateKeyFileName
-	kgc.PublicKeyFile = DefaultPublicKeyFileName
+	kgc.SecretName = "kameshs-bgd-server-jwt-test-1"
 	kgc.KeyInfo.passphrase = []byte("password123")
-	err := kgc.GenerateKeyPair()
+	err = kgc.GenerateAndSaveKeyPair()
 	assert.Nil(t, err)
-	_, err = os.Stat(kgc.PrivateKeyFile)
-	assert.Nil(t, err)
-	_, err = os.Stat(kgc.PublicKeyFile)
-	assert.Nil(t, err)
-	passFile := filepath.Join(path.Dir(kgc.PrivateKeyFile), ".pass")
-	_, err = os.Stat(passFile)
-	assert.Nil(t, err)
+	client = secretsmanager.NewFromConfig(cfg)
 	err = kgc.VerifyKeyPair()
 	assert.Nil(t, err)
-	_ = os.Remove(kgc.PrivateKeyFile)
-	_ = os.Remove(kgc.PublicKeyFile)
-	_ = os.Remove(passFile)
+	//Cleanup
+	err = kgc.deleteTestSecret()
+	assert.Nil(t, err)
 }
 
 func TestGenerateKeyPairWithoutPassphrase(t *testing.T) {
-	kgc := NewRSAKeyGenerator(0)
+	var awsRegion string
+	var err error
+	if v, ok := os.LookupEnv("AWS_REGION"); ok {
+		awsRegion = v
+	} else {
+		awsRegion = "us-west-2"
+	}
+	cfg, err := config.LoadDefaultConfig(context.TODO(),
+		config.WithRegion(awsRegion),
+	)
+	client = secretsmanager.NewFromConfig(cfg)
+	assert.Nil(t, err)
+
+	kgc, err := NewRSAKeyGenerator(0)
+	assert.Nil(t, err)
 	assert.NotNil(t, kgc)
-	kgc.PrivateKeyFile = DefaultPrivateKeyFileName
-	kgc.PublicKeyFile = DefaultPublicKeyFileName
-	err := kgc.GenerateKeyPair()
-	assert.Nil(t, err)
-	_, err = os.Stat(kgc.PrivateKeyFile)
-	assert.Nil(t, err)
-	_, err = os.Stat(kgc.PublicKeyFile)
-	assert.Nil(t, err)
-	passFile := filepath.Join(path.Dir(kgc.PrivateKeyFile), ".pass")
-	_, err = os.Stat(passFile)
-	assert.ErrorIs(t, err, os.ErrNotExist, fmt.Sprintf("Expected file %s not to exist", passFile))
+	kgc.SecretName = "kameshs-bgd-server-jwt-test-2"
+	//Generate and save key
+	err = kgc.GenerateAndSaveKeyPair()
 	err = kgc.VerifyKeyPair()
 	assert.Nil(t, err)
-	_ = os.Remove(kgc.PrivateKeyFile)
-	_ = os.Remove(kgc.PublicKeyFile)
+	//Get secret and ensure password is nil
+	sv, err := client.GetSecretValue(context.Background(), &secretsmanager.GetSecretValueInput{
+		SecretId: aws.String(kgc.SecretName),
+	})
+	assert.Nil(t, err)
+	str := *sv.SecretString
+	assert.NotNil(t, str)
+	var epk encryptedKeyPair
+	err = json.Unmarshal([]byte(str), &epk)
+	assert.Nil(t, err)
+	assert.NotNil(t, epk)
+	assert.Equalf(t, "", epk.Passphrase, "Passphrase should be empty")
+	//Cleanup
+	err = kgc.deleteTestSecret()
+	assert.Nil(t, err)
+}
+
+func (c *Config) deleteTestSecret() error {
+	_, err := client.DeleteSecret(context.TODO(), &secretsmanager.DeleteSecretInput{
+		SecretId:                   aws.String(c.SecretName),
+		ForceDeleteWithoutRecovery: aws.Bool(true),
+	})
+	return err
 }

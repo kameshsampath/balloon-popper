@@ -23,28 +23,23 @@ import (
 	"github.com/kameshsampath/balloon-popper/pkg/security"
 	"github.com/spf13/cobra"
 	"os"
-	"path/filepath"
 )
 
 type JWTKeysOptions struct {
-	bits               int
-	outDir             string
-	privateKeyFilename string
-	publicKeyFilename  string
-	usePassphrase      bool
+	bits          int
+	secretName    string
+	usePassphrase bool
 }
 
 func (jwtOpts *JWTKeysOptions) AddFlags(cmd *cobra.Command) {
 	flags := cmd.Flags()
 
-	flags.StringVarP(&jwtOpts.outDir, "out-dir", "d", "keys",
-		"Directory where the keys are stored")
-	flags.StringVarP(&jwtOpts.privateKeyFilename, "private-key-file", "k", "jwt-private-key",
-		"RSA private key filename")
+	flags.StringVarP(&jwtOpts.secretName, "secret-name", "s", fmt.Sprintf("%s-jwt-keys", os.Getenv("USER")),
+		"Secret name to store the RSA Key Pair in AWS Secrets Manager")
 	flags.IntVarP(&jwtOpts.bits, "bits", "b", 4096,
 		"RSA key size in bits")
 	flags.BoolVarP(&jwtOpts.usePassphrase, "use-passphrase", "p", true,
-		"Encrypt private key with passphrase (stored in .pass file)")
+		"Encrypt private key with passphrase.")
 }
 
 func (jwtOpts *JWTKeysOptions) Validate(cmd *cobra.Command, args []string) error {
@@ -61,14 +56,11 @@ func (jwtOpts *JWTKeysOptions) Execute(cmd *cobra.Command, args []string) error 
 		log.Warnf("Warning: Non-standard key size. Recommended sizes are 2048 or 4096 bits")
 	}
 
-	// Prepare file paths
-	jwtOpts.publicKeyFilename = jwtOpts.privateKeyFilename + ".pub"
-	privateKeyPath := filepath.Join(jwtOpts.outDir, jwtOpts.privateKeyFilename)
-	publicKeyPath := filepath.Join(jwtOpts.outDir, jwtOpts.publicKeyFilename)
-
-	rsaKeyPairConfig := security.NewRSAKeyGenerator(jwtOpts.bits)
-	rsaKeyPairConfig.PrivateKeyFile = privateKeyPath
-	rsaKeyPairConfig.PublicKeyFile = publicKeyPath
+	rsaKeyPairConfig, err := security.NewRSAKeyGenerator(jwtOpts.bits)
+	if err != nil {
+		return err
+	}
+	rsaKeyPairConfig.SecretName = jwtOpts.secretName
 
 	if jwtOpts.usePassphrase {
 		var passphrase string
@@ -88,7 +80,7 @@ func (jwtOpts *JWTKeysOptions) Execute(cmd *cobra.Command, args []string) error 
 	}
 
 	// Generate key pair
-	err = rsaKeyPairConfig.GenerateKeyPair()
+	err = rsaKeyPairConfig.GenerateAndSaveKeyPair()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -101,27 +93,14 @@ func (jwtOpts *JWTKeysOptions) Execute(cmd *cobra.Command, args []string) error 
 }
 
 var jwtKeysCommandExample = fmt.Sprintf(`
-  # Generate keys with default settings (4096 bits, encrypted, in ./keys directory)
+  # Generate keys with default settings (4096 bits, encrypted, in AWS Secrets Manager with key name "$USER-jwt-keys")
   %[1]s jwt-keys
 
-  # Generate unencrypted keys in custom directory
-  %[1]s jwt-keys --out-dir /my/keys --use-passphrase=false
+  # Generate unencrypted keys and save in AWS Secrets Manager	
+  %[1]s jwt-keys --secret-name my-secret-jwt-keys --use-passphrase=false
 
-  # Generate 2048-bit keys with custom filenames
-  %[1]s jwt-keys -b 2048 --private-key-file my-private --public-key-file my-public
-
-  # Generate keys in specific directory with custom private key name
-  %[1]s jwt-keys -d /app/certs -k custom-key
-
-  # Generate keys with all custom options
-  %[1]s jwt-keys --out-dir /certs \
-    --private-key-file auth-private \
-    --public-key-file auth-public \
-    --bits 3072 \
-    --use-passphrase=true
-
-  # Short form with all options
-  %[1]s jwt-keys -d /certs -k auth-private -f auth-public -b 3072 -p
+  # Generate 2048-bit keys
+  %[1]s jwt-keys -b 2048 ---secret-name my-secret-jwt-keys --use-passphrase=false
 `, ExamplePrefix())
 
 // NewJWTKeysCommand starts the Balloon Popper Server
@@ -129,23 +108,18 @@ func NewJWTKeysCommand() *cobra.Command {
 	jwtOpts := &JWTKeysOptions{}
 
 	jwtKeyCommand := &cobra.Command{
-		Use:     "jwt-keys ",
-		Short:   "Generate RSA keys for signing the JWT Tokens",
+		Use:     "jwt-keys",
+		Short:   "Generate RSA keys for signing the JWT Tokens and store the keys in AWS Secrets Manager",
 		Example: jwtKeysCommandExample,
 		RunE:    jwtOpts.Execute,
 		PreRunE: jwtOpts.Validate,
 		PostRunE: func(cmd *cobra.Command, args []string) error {
 			log := logger.Get()
 
-			log.Infof("\nSuccessfully generated %d-bit RSA key pair:\n", jwtOpts.bits)
-			log.Infof("Private key (PKCS#8): %s\n", jwtOpts.privateKeyFilename)
-			log.Infof("Public key: %s\n", jwtOpts.publicKeyFilename)
+			log.Infoln("Successfully generated RSA key pair")
 			if jwtOpts.usePassphrase {
-				log.Infof("Private key is encrypted with passphrase")
+				log.Infoln("Private key is encrypted with passphrase")
 			}
-			log.Infof("\nFile permissions:\n")
-			log.Infof("Private key: 0600 (rw-------)\n")
-			log.Infof("Public key:  0644 (rw-r--r--)\n")
 
 			return nil
 		},

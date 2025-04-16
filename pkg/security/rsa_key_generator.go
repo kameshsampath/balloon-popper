@@ -18,116 +18,270 @@
 package security
 
 import (
+	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
+	"github.com/aws/aws-sdk-go-v2/service/secretsmanager/types"
 	"github.com/kameshsampath/balloon-popper/pkg/logger"
 	"github.com/youmark/pkcs8"
 	"os"
-	"path"
-	"path/filepath"
+)
+
+const (
+	RsaKeyFormatPkcs8 = "PKCS#8"
 )
 
 var (
-	_   RSAKeyGenerator = (*Config)(nil)
-	log                 = logger.Get()
+	_      RSAKeyGenerator = (*Config)(nil)
+	client *secretsmanager.Client
 )
 
+// encryptedKeyPair represents a structure for storing encrypted key information
+type encryptedKeyPair struct {
+	EncryptedPrivateKey string `json:"private_key"`
+	PublicKey           string `json:"public_key"`
+	Passphrase          string `json:"passphrase"`
+	KeyFormat           string `json:"key_format"`         // e.g., "PEM", "PKCS#8"
+	KeyBits             int    `json:"key_bits,omitempty"` // e.g., 2048, 4096 for RSA
+}
+
 // NewRSAKeyGenerator creates the new instance of generator
-func NewRSAKeyGenerator(bits int) *Config {
-	if bits == 0 {
-		bits = 2048
+func NewRSAKeyGenerator(bits int) (*Config, error) {
+	var awsRegion string
+	var err error
+	if v, ok := os.LookupEnv("AWS_REGION"); ok {
+		awsRegion = v
+	} else {
+		awsRegion = "us-west-2"
+	}
+	// Load AWS configuration
+	cfg, err := config.LoadDefaultConfig(context.TODO(),
+		config.WithRegion(awsRegion),
+	)
+	if err != nil {
+		return nil, err
 	}
 
+	// set the encrypting bits to 4096 by default
+	if bits == 0 {
+		bits = 4096
+	}
+	// Initialize the Secrets Manager client
+	client = secretsmanager.NewFromConfig(cfg)
+	logger.Get().Infof("Using AWS Region: %s", awsRegion)
 	return &Config{
 		KeyInfo: &KeyInfo{
 			bits: bits,
 		},
-	}
+	}, nil
 }
 
-func (r *Config) GenerateKeyPair() error {
-	key, err := rsa.GenerateKey(rand.Reader, r.KeyInfo.bits)
+// GenerateAndSaveKeyPair generate the PKCS#8 RSA KeyPair and stores them in the AWS Secret Manager
+func (c *Config) GenerateAndSaveKeyPair() error {
+
+	key, err := rsa.GenerateKey(rand.Reader, c.KeyInfo.bits)
 	if err != nil {
 		return fmt.Errorf("failed to generate RSA key pair: %v", err)
 	}
 
-	//if no error set the key
-	r.KeyInfo.publicKey = &key.PublicKey
-	r.KeyInfo.privateKey = key
+	c.KeyInfo.privateKey = key
+	c.KeyInfo.publicKey = &key.PublicKey
 
 	// Save private key
-	if err := r.savePrivateKeyPKCS8(); err != nil {
-		fmt.Printf("Error saving private key: %v\n", err)
+	var privKey, pubKey string
+	if privKey, err = c.encryptPrivateKeyAsString(); err != nil {
+		fmt.Printf("Error encrypting private key: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Save public key
-	if err := r.savePublicKey(); err != nil {
-		fmt.Printf("Error saving public key: %v\n", err)
+	if pubKey, err = c.publicKeyAsString(); err != nil {
+		fmt.Printf("Error building public key string: %v\n", err)
 		os.Exit(1)
 	}
 
-	log.Infof("using passphrase for RSA key pair,%s", r.KeyInfo.passphrase)
+	keyPair := encryptedKeyPair{
+		EncryptedPrivateKey: privKey,
+		PublicKey:           pubKey,
+		Passphrase:          string(c.KeyInfo.passphrase),
+		KeyFormat:           RsaKeyFormatPkcs8,
+		KeyBits:             c.KeyInfo.bits,
+	}
 
-	if r.KeyInfo.passphrase != nil {
-		err = r.savePassFile()
+	// Marshal encrypted key pair to JSON
+	secretValue, err := json.Marshal(keyPair)
+	if err != nil {
+		return err
+	}
+
+	// Create the secret with KMS encryption
+	so, err := client.CreateSecret(context.TODO(), &secretsmanager.CreateSecretInput{
+		Name:         aws.String(c.SecretName),
+		SecretString: aws.String(string(secretValue)),
+		Description:  aws.String("Encrypted SSH key pair with passphrase"),
+		Tags: []types.Tag{
+			{
+				Key:   aws.String("Owner"),
+				Value: aws.String("Kamesh-DevRel"),
+			},
+			{
+				Key:   aws.String("Type"),
+				Value: aws.String("SSH"),
+			},
+			{
+				Key:   aws.String("Service"),
+				Value: aws.String("JWT Authentication"),
+			},
+			{
+				Key:   aws.String("Demo"),
+				Value: aws.String("BalloonPopper"),
+			},
+		},
+	})
+	log := logger.Get()
+	var resourceExistsErr *types.ResourceExistsException
+	if err != nil && errors.As(err, &resourceExistsErr) {
+		po, err := client.PutSecretValue(context.TODO(), &secretsmanager.PutSecretValueInput{
+			SecretId:     aws.String(c.SecretName),
+			SecretString: aws.String(string(secretValue)),
+		})
 		if err != nil {
-			fmt.Printf("Error saving private key pass file: %v\n", err)
 			return err
 		}
+		log.Infof("Updated existing encrypted key pair secret: %s, with ARN: %s", c.SecretName, *po.ARN)
+	} else {
+		log.Infof("Created new encrypted key pair secret: %s, with ARN: %s", c.SecretName, *so.ARN)
 	}
 
 	return nil
 }
 
-// VerifyKeyPair attempts to read and verify the generated key pair
-func (r *Config) VerifyKeyPair() error {
-	// Read private key file
-	privateKeyData, err := os.ReadFile(r.PrivateKeyFile)
+// VerifyKeyPair attempts to retrieve and verify the key pair from AWS Secrets Manager
+func (c *Config) VerifyKeyPair() error {
+	// Get the secret
+	result, err := client.GetSecretValue(context.TODO(), &secretsmanager.GetSecretValueInput{
+		SecretId: aws.String(c.SecretName),
+	})
 	if err != nil {
-		return fmt.Errorf("failed to read private key file: %v", err)
+		return fmt.Errorf("failed to get secret from AWS Secrets Manager: %v", err)
 	}
 
+	if result.SecretString == nil {
+		return fmt.Errorf("secret value is empty")
+	}
+
+	// Parse the secret JSON
+	var keyData struct {
+		PrivateKey string `json:"private_key"`
+	}
+	if err := json.Unmarshal([]byte(*result.SecretString), &keyData); err != nil {
+		return fmt.Errorf("failed to unmarshal secret data: %v", err)
+	}
+
+	_, err = c.decodePrivateKey(keyData.PrivateKey)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// decodePrivateKey decodes a PEM-encoded PKCS#8 private key string and returns an RSA private key
+func (c *Config) decodePrivateKey(privateKeyPEM string) (*rsa.PrivateKey, error) {
 	// Decode PEM block
-	block, _ := pem.Decode(privateKeyData)
+	block, _ := pem.Decode([]byte(privateKeyPEM))
 	if block == nil {
-		return fmt.Errorf("failed to decode PEM block")
+		return nil, fmt.Errorf("failed to decode PEM block")
 	}
 
-	// Parse private key
+	// Parse private key based on PEM block type
 	var privateKey interface{}
-	privateKey, err = pkcs8.ParsePKCS8PrivateKey(block.Bytes, r.KeyInfo.passphrase)
+	var err error
+
+	switch block.Type {
+	case "ENCRYPTED PRIVATE KEY":
+		// This is an encrypted PKCS#8 key, use the passphrase
+		if c.KeyInfo.passphrase == nil {
+			return nil, fmt.Errorf("encrypted private key found but no passphrase provided")
+		}
+		privateKey, err = pkcs8.ParsePKCS8PrivateKey(block.Bytes, c.KeyInfo.passphrase)
+	case "PRIVATE KEY":
+		// This is an unencrypted PKCS#8 key, don't use passphrase
+		privateKey, err = pkcs8.ParsePKCS8PrivateKey(block.Bytes, nil)
+	default:
+		return nil, fmt.Errorf("unsupported PEM block type: %s", block.Type)
+	}
 
 	if err != nil {
-		return fmt.Errorf("failed to parse private key: %v", err)
+		return nil, fmt.Errorf("failed to parse PKCS#8 private key: %v", err)
 	}
 
 	// Check if it's an RSA key
-	if _, ok := privateKey.(*rsa.PrivateKey); !ok {
-		return fmt.Errorf("not an RSA private key")
+	rsaKey, ok := privateKey.(*rsa.PrivateKey)
+	if !ok {
+		return nil, fmt.Errorf("not an RSA private key")
 	}
 
-	return nil
+	return rsaKey, nil
 }
 
-// savePrivateKeyPKCS8 saves the PrivateKey to file
-func (r *Config) savePrivateKeyPKCS8() error {
+// decodePublicKey decodes a PEM-encoded PKCS#8 public key string and returns an RSA public key
+func (c *Config) decodePublicKey(publicKeyPEM string) (*rsa.PublicKey, error) {
+	// Decode PEM block
+	block, _ := pem.Decode([]byte(publicKeyPEM))
+	if block == nil {
+		return nil, fmt.Errorf("failed to decode PEM block")
+	}
+
+	// Check PEM block type - PKCS#8 public keys use "PUBLIC KEY"
+	if block.Type != "PUBLIC KEY" {
+		return nil, fmt.Errorf("unsupported PEM block type: %s", block.Type)
+	}
+
+	// Parse PKCS#8 public key
+	publicKey, err := x509.ParsePKIXPublicKey(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse PKCS#8 public key: %v", err)
+	}
+
+	// Check if it's an RSA key
+	rsaKey, ok := publicKey.(*rsa.PublicKey)
+	if !ok {
+		return nil, fmt.Errorf("not an RSA public key")
+	}
+
+	return rsaKey, nil
+}
+
+// encryptPrivateKeyAsString encrypts the Private Key to string
+func (c *Config) encryptPrivateKeyAsString() (string, error) {
 	var privateKeyBytes []byte
 	var err error
 
-	privateKeyBytes, err = pkcs8.MarshalPrivateKey(r.KeyInfo.privateKey, r.KeyInfo.passphrase, nil)
+	// If passphrase is nil, marshal without encryption
+	if c.KeyInfo.passphrase == nil {
+		privateKeyBytes, err = pkcs8.MarshalPrivateKey(c.KeyInfo.privateKey, nil, nil)
+	} else {
+		privateKeyBytes, err = pkcs8.MarshalPrivateKey(c.KeyInfo.privateKey, c.KeyInfo.passphrase, nil)
+	}
 
 	if err != nil {
-		return fmt.Errorf("failed to marshal private key to PKCS#8: %v", err)
+		return "", fmt.Errorf("failed to marshal private key to PKCS#8: %v", err)
 	}
 
 	// Create PEM block
 	privatePEM := &pem.Block{
 		Type: func() string {
-			if r.KeyInfo.passphrase != nil {
+			if c.KeyInfo.passphrase != nil {
 				return "ENCRYPTED PRIVATE KEY"
 			}
 			return "PRIVATE KEY" // standard type for PKCS#8
@@ -135,31 +289,21 @@ func (r *Config) savePrivateKeyPKCS8() error {
 		Bytes: privateKeyBytes,
 	}
 
-	// Create directory if it doesn't exist
-	if err := os.MkdirAll(filepath.Dir(r.PrivateKeyFile), 0700); err != nil {
-		return fmt.Errorf("failed to create directory: %v", err)
+	var privateKeyBuffer bytes.Buffer
+	if err := pem.Encode(&privateKeyBuffer, privatePEM); err != nil {
+		return "", fmt.Errorf("failed to encode private key: %v", err)
 	}
+	privateKeyString := privateKeyBuffer.String()
 
-	// Save private key
-	privateFile, err := os.OpenFile(r.PrivateKeyFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
-	if err != nil {
-		return fmt.Errorf("failed to open private key file: %v", err)
-	}
-	defer privateFile.Close() //nolint:errcheck
-
-	if err := pem.Encode(privateFile, privatePEM); err != nil {
-		return fmt.Errorf("failed to write private key: %v", err)
-	}
-
-	return nil
+	return privateKeyString, nil
 }
 
-// savePublicKey saves the Public Key to file
-func (r *Config) savePublicKey() error {
+// publicKeyAsString gets the string representation of the public key
+func (c *Config) publicKeyAsString() (string, error) {
 	// Marshal public key
-	publicKeyBytes, err := x509.MarshalPKIXPublicKey(r.KeyInfo.publicKey)
+	publicKeyBytes, err := x509.MarshalPKIXPublicKey(c.KeyInfo.publicKey)
 	if err != nil {
-		return fmt.Errorf("failed to marshal public key: %v", err)
+		return "", fmt.Errorf("failed to marshal public key: %v", err)
 	}
 
 	// Create PEM block
@@ -168,38 +312,11 @@ func (r *Config) savePublicKey() error {
 		Bytes: publicKeyBytes,
 	}
 
-	// Create directory if it doesn't exist
-	if err := os.MkdirAll(filepath.Dir(r.PublicKeyFile), 0700); err != nil {
-		return fmt.Errorf("failed to create directory: %v", err)
+	var publicKeyBuffer bytes.Buffer
+	if err := pem.Encode(&publicKeyBuffer, publicPEM); err != nil {
+		return "", fmt.Errorf("failed to encode private key: %v", err)
 	}
+	privateKeyString := publicKeyBuffer.String()
 
-	// Save public key
-	publicFile, err := os.OpenFile(r.PublicKeyFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
-	if err != nil {
-		return fmt.Errorf("failed to open public key file: %v", err)
-	}
-	defer publicFile.Close() //nolint:errcheck
-
-	if err := pem.Encode(publicFile, publicPEM); err != nil {
-		return fmt.Errorf("failed to write public key: %v", err)
-	}
-
-	return nil
-}
-
-// savePassFile saves the private key passphrase into a file
-// TODO: encrypt and save
-func (r *Config) savePassFile() error {
-	// Save password file
-	passFilePath := filepath.Join(path.Dir(r.PrivateKeyFile), ".pass")
-	passFile, err := os.OpenFile(filepath.Clean(passFilePath), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
-	if err != nil {
-		panic(fmt.Errorf("failed to open pass key file: %v", err))
-	}
-	defer passFile.Close() //nolint:errcheck
-	_, err = passFile.Write(r.KeyInfo.passphrase)
-	if err != nil {
-		return err
-	}
-	return nil
+	return privateKeyString, nil
 }

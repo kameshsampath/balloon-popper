@@ -40,6 +40,5 @@ max-same-issues = 0
 fix = true
 
 [output]
-formats = "colored-line-number"
 print-issued-lines = true
 print-linter-name = true
