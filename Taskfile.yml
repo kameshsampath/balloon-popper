@@ -1,0 +1,35 @@
+# https://taskfile.dev
+
+version: '3'
+
+dotenv:
+  - '.env'
+
+tasks:
+  binaries:
+    cmds:
+      - |
+        goreleaser release --snapshot --clean
+    silent: true
+
+  jwt-keys:
+    cmds:
+      - |
+        go run cmd/main.go jwt-keys \
+          --secret-name $JWT_KEY_SECRET_NAME --use-passphrase
+    silent: false
+
+  create-admin:
+    cmds:
+      - |
+        go run cmd/main.go user --user-name admin --name "Game Admin" \
+           --email "admin@example.com" --role admin \
+           --user-password $BALLOON_POPPER_ADMIN_PASSWORD
+    silent: false
+
+  server:
+    cmds:
+      - |
+        go run cmd/main.go server --jwt-keys-secret $JWT_KEY_SECRET_NAME \
+          --kafka-servers $KAFKA_BOOTSTRAP_SERVERS
+    silent: true
