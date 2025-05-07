@@ -29,6 +29,7 @@
             --text-color: #2c3e50;
             --success-color: #2ecc71;
             --error-color: #e74c3c;
+            --negative-color: #e74c3c;
         }
 
         * {
@@ -150,12 +151,31 @@
             animation: pulse 0.5s ease-in-out;
         }
 
-        #bonusHits, #regularHits {
+        .negative {
+            color: var(--negative-color);
+            animation: shake 0.5s ease-in-out;
+        }
+
+        .level-up {
+            color: var(--success-color);
+            animation: pulse 0.5s ease-in-out;
+        }
+
+        #bonusHits, #regularHits, #negativeHits, #level {
             text-align: center;
             padding: 8px;
             margin: 5px 0;
             background-color: #f8f9fa;
             border-radius: 4px;
+        }
+
+        #negativeHits {
+            color: var(--negative-color);
+        }
+
+        #level {
+            font-weight: bold;
+            background-color: #d6eaf8;
         }
 
         .favorite-colors {
@@ -177,6 +197,18 @@
             font-size: 14px;
             color: white;
             text-shadow: 1px 1px 1px rgba(0,0,0,0.3);
+        }
+
+        .negative-colors {
+            margin-top: 1rem;
+            padding: 10px;
+            background-color: #fdedec;
+            border-radius: 4px;
+        }
+
+        .negative-colors h3 {
+            margin-bottom: 0.5rem;
+            color: var(--negative-color);
         }
 
         button {
@@ -219,162 +251,220 @@
             color: var(--error-color);
         }
 
+        .game-info {
+            margin-top: 15px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        }
+
+        .game-info h3 {
+            margin-bottom: 0.5rem;
+            color: var(--text-color);
+        }
+
+        .divider {
+            height: 1px;
+            background-color: #ddd;
+            margin: 15px 0;
+        }
+
         @keyframes pulse {
             0% { transform: scale(1); }
             50% { transform: scale(1.2); }
             100% { transform: scale(1); }
         }
+
+        @keyframes shake {
+            0% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            50% { transform: translateX(5px); }
+            75% { transform: translateX(-5px); }
+            100% { transform: translateX(0); }
+        }
     </style>
 </head>
-<!-- Rest of the HTML remains the same as in the previous version -->
 <body>
-    <header>
-        <h1>Balloon Popping Game</h1>
-    </header>
+<header>
+    <h1>Balloon Popping Game</h1>
+</header>
 
-    <div class="container">
-        <div id="registrationForm" class="registration-form">
-            <h2>Player Registration</h2>
-            <div class="form-group">
-                <label for="playerName">Your Name:</label>
-                <input type="text" id="playerName" required placeholder="Enter your name">
-            </div>
-            <div class="form-group">
-                <label for="characterSelect">Select Character:</label>
-                <select id="characterSelect" required>
-                    <option value="">Choose a character...</option>
-                </select>
-            </div>
-            <div id="favoriteColors" class="favorite-colors">
-                <h3>Favorite Colors:</h3>
-                <div id="colorList"></div>
-            </div>
-            <button id="startPlaying">Start Playing</button>
+<div class="container">
+    <div id="registrationForm" class="registration-form">
+        <h2>Player Registration</h2>
+        <div class="form-group">
+            <label for="playerName">Your Name:</label>
+            <input type="text" id="playerName" required placeholder="Enter your name">
         </div>
-
-        <div id="gameContainer" class="game-container">
-            <div class="game-area">
-                <canvas id="gameCanvas"></canvas>
-            </div>
-            
-            <div class="score-panel">
-                <div class="player-info">
-                    <h3 id="playerInfo">Player: </h3>
-                    <div id="characterInfo">Character: </div>
-                    <div id="favoriteColorsInfo" class="favorite-colors">
-                        <h3>Bonus Colors:</h3>
-                        <div id="bonusInfo"></div>
-                    </div>
-                </div>
-                <div class="score" id="score">Score: 0</div>
-                <div id="bonusHits">Bonus Hits: 0</div>
-                <div id="regularHits">Regular Hits: 0</div>
-                <div class="status" id="gameStatus">Waiting for game to start...</div>
-            </div>
+        <div class="form-group">
+            <label for="characterSelect">Select Character:</label>
+            <select id="characterSelect" required>
+                <option value="">Choose a character...</option>
+            </select>
         </div>
+        <div id="favoriteColors" class="favorite-colors">
+            <h3>Favorite Colors:</h3>
+            <div id="colorList"></div>
+        </div>
+        <button id="startPlaying">Start Playing</button>
     </div>
 
-    <script src="/static/game.js"></script>
-    <script>
-        // Previous JavaScript code remains the same
-        let gameInstance = null;
-        
-        document.addEventListener('DOMContentLoaded', async () => {
-            console.log("Page loaded, initializing game setup");
-            
-            // Fetch game configuration
-            const response = await fetch('/config');
-            const config = await response.json();
-            
-            // Populate character select
-            const characterSelect = document.getElementById('characterSelect');
-            Object.keys(config.character_favorites).forEach(character => {
-                const option = document.createElement('option');
-                option.value = character;
-                option.textContent = character.replace('_', ' ');
-                characterSelect.appendChild(option);
-            });
+    <div id="gameContainer" class="game-container">
+        <div class="game-area">
+            <canvas id="gameCanvas"></canvas>
+        </div>
 
-            // Handle character selection
-            characterSelect.addEventListener('change', (e) => {
-                const character = e.target.value;
-                const colors = config.character_favorites[character] || [];
-                const colorList = document.getElementById('colorList');
-                colorList.innerHTML = colors.map(color => 
-                    `<span style="background-color: ${color}">${color}</span>`
-                ).join('');
-            });
+        <div class="score-panel">
+            <div class="player-info">
+                <h3 id="playerInfo">Player: </h3>
+                <div id="characterInfo">Character: </div>
+            </div>
 
-            // Handle player registration
-            document.getElementById('startPlaying').addEventListener('click', async () => {
-                const playerName = document.getElementById('playerName').value.trim();
-                const character = characterSelect.value;
+            <div class="score" id="score">Score: 0</div>
+            <div id="level">Level: 1</div>
 
-                if (!playerName || !character) {
-                    alert('Please fill in all fields!');
-                    return;
-                }
+            <div class="game-info">
+                <h3>Game Stats</h3>
+                <div id="bonusHits">Bonus Hits: 0</div>
+                <div id="regularHits">Regular Hits: 0</div>
+                <div id="negativeHits">Negative Hits: 0</div>
+            </div>
 
-                console.log("Starting game for player:", playerName, "as character:", character);
+            <div class="divider"></div>
 
-                // Hide registration form and show game
-                document.getElementById('registrationForm').classList.add('hidden');
-                const gameContainer = document.getElementById('gameContainer');
-                gameContainer.classList.add('active');
+            <div id="favoriteColorsInfo" class="favorite-colors">
+                <h3>Bonus Colors:</h3>
+                <div id="bonusInfo"></div>
+            </div>
 
-                // Update player info
-                document.getElementById('playerInfo').textContent = `Player: ${playerName}`;
-                document.getElementById('characterInfo').textContent = `Character: ${character}`;
-                document.getElementById('bonusInfo').innerHTML =  config.character_favorites[character].map(color => 
-                    `<span style="background-color: ${color}">${color}</span>`
-                ).join('');
+            <div id="negativeColorsInfo" class="negative-colors">
+                <h3>Negative Balloons:</h3>
+                <div id="negativeInfo">Avoid these balloons!</div>
+            </div>
 
-                // Check if game is active
-                try {
-                    const status = await fetch('/status').then(r => r.json());
-                    console.log("Game status:", status);
-                    
-                    if (status.is_active) {
-                        console.log("Game is active, creating game instance");
-                        gameInstance = new BalloonGame(character, playerName);
-                    } else {
-                        console.log("Waiting for game to start...");
-                        document.getElementById('gameStatus').textContent = 'Waiting for game to start...';
-                    }
-                } catch (error) {
-                    console.error('Error checking game status:', error);
-                }
-            });
+            <div class="status" id="gameStatus">Waiting for game to start...</div>
+        </div>
+    </div>
+</div>
 
-            // Check game status periodically
-            setInterval(async () => {
-                try {
-                    const status = await fetch('/status').then(r => r.json());
-                    const statusDiv = document.getElementById('gameStatus');
-                    
-                    if (status.is_active) {
-                        statusDiv.textContent = 'Game is Active';
-                        statusDiv.className = 'status active';
-                        if (!gameInstance && document.getElementById('gameContainer').classList.contains('active')) {
-                            console.log("Game became active, creating game instance");
-                            const playerName = document.getElementById('playerName').value;
-                            const character = characterSelect.value;
-                            gameInstance = new BalloonGame(character, playerName);
-                        }
-                    } else {
-                        statusDiv.textContent = 'Waiting for game to start...';
-                        statusDiv.className = 'status inactive';
-                        if (gameInstance) {
-                            console.log("Game stopped, cleaning up instance");
-                            gameInstance.stopGame();
-                            gameInstance = null;
-                        }
-                    }
-                } catch (error) {
-                    console.error('Failed to check game status:', error);
-                }
-            }, 1000);
+<script src="/static/game.js"></script>
+<script>
+    let gameInstance = null;
+
+    document.addEventListener('DOMContentLoaded', async () => {
+        console.log("Page loaded, initializing game setup");
+
+        // Fetch game configuration
+        const response = await fetch('/config');
+        const config = await response.json();
+
+        // Populate character select
+        const characterSelect = document.getElementById('characterSelect');
+        Object.keys(config.character_favorites).forEach(character => {
+            const option = document.createElement('option');
+            option.value = character;
+            option.textContent = character.replace('_', ' ');
+            characterSelect.appendChild(option);
         });
-    </script>
+
+        // Handle character selection
+        characterSelect.addEventListener('change', (e) => {
+            const character = e.target.value;
+            const colors = config.character_favorites[character] || [];
+            const colorList = document.getElementById('colorList');
+            colorList.innerHTML = colors.map(color =>
+                `<span style="background-color: ${color}">${color}</span>`
+            ).join('');
+        });
+
+        // Handle player registration
+        document.getElementById('startPlaying').addEventListener('click', async () => {
+            const playerName = document.getElementById('playerName').value.trim();
+            const character = characterSelect.value;
+
+            if (!playerName || !character) {
+                alert('Please fill in all fields!');
+                return;
+            }
+
+            console.log("Starting game for player:", playerName, "as character:", character);
+
+            // Hide registration form and show game
+            document.getElementById('registrationForm').classList.add('hidden');
+            const gameContainer = document.getElementById('gameContainer');
+            gameContainer.classList.add('active');
+
+            // Update player info
+            document.getElementById('playerInfo').textContent = `Player: ${playerName}`;
+            document.getElementById('characterInfo').textContent = `Character: ${character}`;
+            document.getElementById('bonusInfo').innerHTML = config.character_favorites[character].map(color =>
+                `<span style="background-color: ${color}">${color}</span>`
+            ).join('');
+
+            // Check if game is active
+            try {
+                const status = await fetch('/status').then(r => r.json());
+                console.log("Game status:", status);
+
+                if (status.is_active) {
+                    console.log("Game is active, creating game instance");
+                    gameInstance = new BalloonGame(character, playerName);
+                } else {
+                    console.log("Waiting for game to start...");
+                    document.getElementById('gameStatus').textContent = 'Waiting for game to start...';
+                }
+            } catch (error) {
+                console.error('Error checking game status:', error);
+            }
+        });
+
+        // Check game status periodically
+        setInterval(async () => {
+            try {
+                const status = await fetch('/status').then(r => r.json());
+                const statusDiv = document.getElementById('gameStatus');
+
+                if (status.is_active) {
+                    statusDiv.textContent = 'Game is Active';
+                    statusDiv.className = 'status active';
+                    if (!gameInstance && document.getElementById('gameContainer').classList.contains('active')) {
+                        console.log("Game became active, creating game instance");
+                        const playerName = document.getElementById('playerName').value;
+                        const character = characterSelect.value;
+                        gameInstance = new BalloonGame(character, playerName);
+                    }
+                } else {
+                    statusDiv.textContent = 'Waiting for game to start...';
+                    statusDiv.className = 'status inactive';
+                    if (gameInstance) {
+                        console.log("Game stopped, cleaning up instance");
+                        gameInstance.stopGame();
+                        gameInstance = null;
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to check game status:', error);
+            }
+        }, 1000);
+
+        // Update negative balloon info when config is loaded
+        const allColors = Object.keys(config.colors || {});
+        const allFavoriteColors = new Set();
+
+        for (const char in config.character_favorites) {
+            config.character_favorites[char].forEach(color =>
+                allFavoriteColors.add(color)
+            );
+        }
+
+        const nonFavoriteColors = allColors.filter(color => !allFavoriteColors.has(color));
+
+        if (nonFavoriteColors.length > 0) {
+            const negativeColor = nonFavoriteColors[0];
+            const negativeInfo = document.getElementById('negativeInfo');
+            negativeInfo.innerHTML = `<span style="background-color: ${negativeColor}">${negativeColor}</span> (-10 points)`;
+        }
+    });
+</script>
 </body>
 </html>

@@ -62,6 +62,7 @@ type GameMessage struct {
 	Player       string `json:"player"`
 	Character    string `json:"character"`
 	BalloonColor string `json:"balloon_color"`
+	NegativeHit  bool   `json:"negative_hit"`
 }
 
 // ScoreUpdate represents the score state

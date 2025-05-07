@@ -103,11 +103,14 @@ func (e *EndpointConfig) WebSocket(c echo.Context) error {
 		log.Infof("Recevied message %s", msg)
 
 		// Process game event
+		isNegativeHit := msg.NegativeHit
 		isFavoriteHit := contains(e.config.CharacterFavorites[msg.Character], msg.BalloonColor)
 		score := e.config.Colors[msg.BalloonColor]
 		//double the score for bonus hits
 		if isFavoriteHit {
 			score = score * 2
+		} else if isNegativeHit {
+			score = -(score / 2)
 		}
 		event := models.NewGameEvent(
 			playerName,
