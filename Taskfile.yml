@@ -30,6 +30,8 @@ tasks:
   server:
     cmds:
       - |
-        go run cmd/main.go server --jwt-keys-secret $JWT_KEY_SECRET_NAME \
-          --kafka-servers $KAFKA_BOOTSTRAP_SERVERS
+        go run cmd/main.go server \
+          -k ./keys/jwt-private-key \
+          -p $(cat ./keys/.pass) \
+          -c ./config/users.json
     silent: true
