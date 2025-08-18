@@ -9,3 +9,5 @@ keys/
 config
 **/*-key
 http-client.private.env.json
+config.private.json
+commands.md

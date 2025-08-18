@@ -1,253 +1,223 @@
 # Balloon Popping Game
 
-An interactive game designed to generate streaming data for real-time analytics demonstrations. The game uses WebSocket for real-time interactions and streams events to Kafka, making it perfect for showcasing streaming databases and real-time analytics capabilities.
+An interactive demo designed to generate streaming data for real-time analytics demonstrations. The game uses WebSocket for real-time interactions and streams events to Kafka, making it perfect for showcasing streaming databases and real-time analytics capabilities.
 
-## Features & Use Cases
+> [!NOTE]
+> This README provides comprehensive setup instructions to run the Balloon Popping Game demo locally.
 
--   Real-time player performance analytics
--   Time-series analysis of game events
--   Pattern detection in player behavior
--   Color popularity and bonus effectiveness tracking
--   Visual effects for bonus balloons
--   Real-time score updates with animations
+## 🚀 Features & Use Cases
 
----
-
-## Getting Started
-
-### Prerequisites
-
--   Docker and Docker Compose (recommended)
--   Web browser with HTML5 support
-
-### Quick Start with Docker
-
-1. Clone and start the application:
-
-```bash
-git clone <repository-url>
-cd balloon-game
-docker compose up -d
-```
-
-2. Start a game session:
-
-```bash
-curl -X POST http://localhost:8000/game/start
-```
-
-3. Open http://localhost:8000 in your browser
-
-    - Enter player name
-    - Select character
-    - Start playing
-
-4. Monitor events:
-
-```bash
-docker compose exec kafka \
-  bin/kafka-console-consumer.sh \
-    --bootstrap-server localhost:9092 \
-    --topic game_scores \
-    --from-beginning
-```
-
-### Manual Setup (Without Docker)
-
-1. Create environment file:
-
-```bash
-# .env.docker
-KAFKA_BOOTSTRAP_SERVERS=localhost:9092
-KAFKA_TOPIC=game-scores
-APP_LOG_LEVEL=DEBUG
-```
-
-2. Install dependencies:
-
-```bash
-uv venv
-source .venv/bin/activate  # Linux/Mac
-uv pip install -r requirements.txt
-```
-
-3. Run the application:
-
-```bash
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-```
+- Real-time player performance analytics
+- Time-series analysis of game events
+- Pattern detection in player behavior
+- Color popularity and bonus effectiveness tracking
+- Visual effects for bonus balloons
+- Real-time score updates with animations
 
 ---
 
-## Game Details
+## ⚡️ Prerequisites
 
-### Character Configuration
+> [!IMPORTANT]
+> **Required Tools**
+>
+> - [Go](https://go.dev/dl/) >= 1.23.4
+> - [Docker](https://docs.docker.com/get-docker/) & Docker Compose
+> - [HTTPie](https://httpie.io/cli) - for API testing
+> - [jq](https://jqlang.github.io/jq/) - for JSON processing
+> - [Task](https://taskfile.dev/) (optional) - for running tasks
+> - [OpenSSL](https://www.openssl.org/) - for key verification
+> - Web browser with HTML5 support
+> - [Kafka](https://kafka.apache.org/downloads) (local or Docker)
 
-Each character has favorite colors that give bonus points:
-
-```python
-{
-    "Jerry": ["brown", "yellow"],
-    "Mickey": ["red", "black"],
-    "Sonic": ["blue", "gold"],
-    # ... more characters
-}
-```
-
-### Scoring System
-
--   Base points vary by balloon color
--   Bonus points (2x) for favorite colors
--   Visual sparkle effect for bonus balloons
--   Real-time score animations
-
-### Game Controls
-
-```bash
-# Start game
-curl -X POST http://localhost:8000/game/start
-
-# Check status
-curl http://localhost:8000/game/status
-
-# Stop game
-curl -X POST http://localhost:8000/game/stop
-```
+> [!TIP]
+> For complete infrastructure setup, follow: [Balloon Popper Demo Infrastructure Guide](https://kameshsampath.github.io/balloon-popper-demo/)
 
 ---
 
-## Technical Documentation
+## 🛠️ Setup & Configuration
 
-### Architecture
+### Step 1: Generate JWT Keys
 
-#### Backend
+Create the RSA key pair for JWT token signing:
 
--   [FastAPI](https://fastapi.tiangolo.com/) - Modern web framework
--   [Uvicorn](https://www.uvicorn.org/) - ASGI server
--   [WebSockets](https://websockets.readthedocs.io/) - Real-time communication
--   [Pydantic](https://docs.pydantic.dev/) - Data validation
+```shell
+go run cmd/main.go jwt-keys
+```
 
-#### Event Streaming
+**Using Taskfile (requires environment variables):**
 
--   [Apache Kafka](https://kafka.apache.org/) - Event streaming platform
--   [aiokafka](https://aiokafka.readthedocs.io/) - Async Kafka client
+```shell
+task jwt-keys
+```
 
-#### Frontend
+> [!NOTE]
+> The Taskfile version requires `JWT_KEY_SECRET_NAME` environment variable to be set.
 
--   [HTML5 Canvas](https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API) - Game rendering
--   [WebSocket API](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket) - Real-time updates
+### Step 2: Create Admin User
 
-### Data Streams
+Create an admin user for game management:
 
-#### Score Events
+```shell
+go run cmd/main.go user -u admin -p password1234! -r admin -e 'balloon-game-admin@example.com'
+```
+
+**Using Taskfile (requires environment variables):**
+
+```shell
+task create-admin
+```
+
+> [!NOTE]
+> The Taskfile version requires `BALLOON_POPPER_ADMIN_PASSWORD` environment variable to be set.
+
+### Step 3: Verify RSA Keys (Optional)
+
+Verify that the JWT keys were created correctly:
+
+```shell
+# Basic verification
+openssl rsa -in keys/jwt-private-key -inform PEM -passin file:keys/.pass
+
+# Detailed key information
+openssl rsa -in keys/jwt-private-key -inform PEM -passin file:keys/.pass -text -noout
+```
+
+### Step 4: Configuration File
+
+Create `config.json` in the project root:
 
 ```json
 {
-    "player": "PlayerName",
-    "balloon_color": "red",
-    "score": 100,
-    "favorite_color_bonus": true,
-    "event_ts": "2025-02-04T12:25:35.202Z"
+  "dev": {
+    "host": "localhost",
+    "port": "8080",
+    "username": "admin",
+    "password": "password1234!"
+  }
 }
 ```
 
-#### Session Events
-
-```json
-{
-    "event_type": "session",
-    "action": "start|stop",
-    "player_count": 5,
-    "session_id": "uuid",
-    "event_ts": "2025-02-04T12:25:35.202Z"
-}
-```
-
-### Stream Characteristics
-
--   Topic: `game_scores` (configurable)
--   Timestamp precision: Milliseconds
--   Event ordering: Preserved within sessions
--   Time zone: UTC
--   Data rate: Variable based on active players
+> [!WARNING]
+> **Security Notice**
+>
+> - Replace `password1234!` with your actual admin password
+> - Do not commit `config.json` to version control
+> - Consider using environment variables for production
 
 ---
 
-## Development Guide
+## 🏃‍♂️ Running the Application
 
-### Project Structure
+### Start the Server
 
-```
-balloon-game/
-├── main.py              # FastAPI application
-├── models.py            # Data models
-├── kafka_producer.py    # Kafka integration
-├── static/             # Frontend assets
-├── docker-compose.yml  # Docker configuration
-└── requirements.txt    # Dependencies
+```shell
+go run cmd/main.go server -k ./keys/jwt-private-key -p $(cat ./keys/.pass) -c ./config/users.json
 ```
 
-### Development Tools
+**Using Taskfile:**
 
--   [uv](https://github.com/astral-sh/uv) - Package management
--   [ruff](https://github.com/astral-sh/ruff) - Linting and formatting
--   [mockafka-py](https://github.com/notnot/mockafka) - Testing
-
-### Docker Development
-
-```bash
-# Rebuild after changes
-docker compose build game
-docker compose up -d game
-
-# View logs
-docker compose logs -f
-
-# Clean up
-docker compose down -v
+```shell
+task server
 ```
 
-### Environment Variables
-
-```yaml
-KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-KAFKA_TOPIC: game_scores
-APP_LOG_LEVEL: DEBUG
-BONUS_PROBABILITY: 0.15
-```
-
-### Troubleshooting
-
-#### WebSocket Issues
-
--   Check FastAPI server status
--   Verify WebSocket URL
--   Check browser console
--   Review DEBUG logs
-
-#### Kafka Issues
-
--   Verify broker is running
--   Check connection strings
--   Confirm topic exists
--   Review broker logs
-
-#### Game Issues
-
--   Verify game session is active
--   Check API responses
--   Monitor WebSocket state
--   Review browser console
+The server will start on `http://localhost:8080`
 
 ---
 
-## License
+## 🎮 Game Management API
+
+### Option 1: Using HTTPie Commands
+
+**Login and get JWT token:**
+
+```shell
+http --form POST localhost:8080/login \
+  username=admin \
+  password='password1234!' \
+  Accept:application/json
+```
+
+**Start the game (replace `<TOKEN>` with JWT from login):**
+
+```shell
+http POST localhost:8080/admin/start \
+  Authorization:"Bearer <TOKEN>" \
+  Content-Type:application/json \
+  Accept:application/json \
+  '{}'
+```
+
+**Stop the game:**
+
+```shell
+http POST localhost:8080/admin/stop \
+  Authorization:"Bearer <TOKEN>" \
+  Content-Type:application/json \
+  Accept:application/json \
+  '{}'
+```
+
+### Option 2: Using Provided Scripts
+
+**Start the game:**
+
+```shell
+./start_game.sh
+```
+
+**Stop the game:**
+
+```shell
+./stop_game.sh
+```
+
+> [!TIP]
+> The scripts automatically handle login and token extraction using your `config.json` settings.
+
+---
+
+## 🖥️ Playing the Game
+
+1. **Start the server** (see above)
+2. **Start the game** using API or scripts
+3. **Open the game UI** in your browser: <http://localhost:8080>
+
+---
+
+## 📚 API Endpoints
+
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| POST | `/login` | Authenticate user | No |
+| POST | `/admin/start` | Start game | Yes (Bearer token) |
+| POST | `/admin/stop` | Stop game | Yes (Bearer token) |
+| GET | `/health` | Health check | No |
+
+---
+
+## 🔧 Troubleshooting
+
+> [!WARNING]
+> **Common Issues**
+>
+> - **"missing or malformed JWT"**: Ensure you're sending the `Authorization: Bearer <token>` header
+> - **Login fails**: Check username/password in `config.json` matches created user
+> - **Key errors**: Verify JWT keys exist in `keys/` directory
+> - **Port conflicts**: Ensure port 8080 is available
+
+---
+
+## 📖 Related Documentation
+
+- [Echo Framework](https://echo.labstack.com/) - Web framework used
+- [Kafka Documentation](https://kafka.apache.org/documentation/) - Message streaming
+- [HTML5 Canvas Tutorial](https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API/Tutorial) - Game graphics
+- [JWT.io](https://jwt.io/) - JSON Web Tokens
+- [Taskfile](https://taskfile.dev/) - Task runner
+
+---
+
+## 📄 License
 
 This project is licensed under the Apache License 2.0 - see the LICENSE file for details.
-
-## Related Documentation
-
--   [FastAPI WebSocket Guide](https://fastapi.tiangolo.com/advanced/websockets/)
--   [Kafka Documentation](https://kafka.apache.org/documentation/)
--   [HTML5 Canvas Tutorial](https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API/Tutorial)
--   [Pydantic v2 Documentation](https://docs.pydantic.dev/latest/)
